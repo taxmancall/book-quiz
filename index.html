@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+  <title>📚 책 읽기 퀴즈</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700;900&display=swap" rel="stylesheet"/>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Noto Sans KR',system-ui,sans-serif;background:linear-gradient(135deg,#FFFBF0,#FFF8E1 50%,#F3E5F5);min-height:100vh}
+    @keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+    button:active{transform:scale(0.97)}
+    input:focus{outline:none}
+    .spin{animation:spin 1s linear infinite;display:inline-block}
+    .file-btn{position:relative;display:flex;align-items:center;justify-content:center;gap:8px;padding:14px 0;border-radius:13px;font-size:15px;font-weight:700;cursor:pointer;border:none}
+    .file-btn input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;font-size:0}
+    .file-btn:active{opacity:.8}
+  </style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const PROMPT=`You are a reading quiz teacher for elementary school 2nd graders.
+
+STEP 1: Look at the book cover image to identify the exact book title and author.
+STEP 2: Use YOUR KNOWLEDGE of the actual book content to create quiz questions.
+IMPORTANT: Do NOT ask about the book cover, title, or author. Ask about what HAPPENS IN THE STORY.
+
+LANGUAGE: Korean book → all questions in Korean / English book → all questions in English.
+
+ALL questions are multiple choice with 4 options. No text input.
+
+For vocabulary questions, you MUST include a "word" field with the actual word being tested (used for word list summary at the end).
+
+Respond ONLY with valid JSON, nothing else.
+{"book_title":"제목","author":"저자","language":"ko","book_found":true,"questions":[
+{"id":1,"type":"ox","question":"이야기 속 사건 참/거짓","answer":true,"explanation":"해설"},
+{"id":2,"type":"ox","question":"이야기 속 사건 참/거짓","answer":false,"explanation":"해설"},
+{"id":3,"type":"ox","question":"이야기 속 사건 참/거짓","answer":true,"explanation":"해설"},
+{"id":4,"type":"ox","question":"이야기 속 사건 참/거짓","answer":false,"explanation":"해설"},
+{"id":5,"type":"ox","question":"이야기 속 사건 참/거짓","answer":true,"explanation":"해설"},
+{"id":6,"type":"content","question":"내용 이해 질문?","options":["①A","②B","③C","④D"],"answer":"①A","explanation":"해설"},
+{"id":7,"type":"content","question":"내용 이해 질문?","options":["①A","②B","③C","④D"],"answer":"②B","explanation":"해설"},
+{"id":8,"type":"content","question":"내용 이해 질문?","options":["①A","②B","③C","④D"],"answer":"③C","explanation":"해설"},
+{"id":9,"type":"content","question":"내용 이해 질문?","options":["①A","②B","③C","④D"],"answer":"④D","explanation":"해설"},
+{"id":10,"type":"content","question":"내용 이해 질문?","options":["①A","②B","③C","④D"],"answer":"①A","explanation":"해설"},
+{"id":11,"type":"fill_blank","question":"문장에서 ___ 에 들어갈 말은?","options":["①A","②B","③C","④D"],"answer":"②B","explanation":"해설"},
+{"id":12,"type":"fill_blank","question":"문장에서 ___ 에 들어갈 말은?","options":["①A","②B","③C","④D"],"answer":"③C","explanation":"해설"},
+{"id":13,"type":"fill_blank","question":"문장에서 ___ 에 들어갈 말은?","options":["①A","②B","③C","④D"],"answer":"①A","explanation":"해설"},
+{"id":14,"type":"fill_blank","question":"문장에서 ___ 에 들어갈 말은?","options":["①A","②B","③C","④D"],"answer":"④D","explanation":"해설"},
+{"id":15,"type":"fill_blank","question":"문장에서 ___ 에 들어갈 말은?","options":["①A","②B","③C","④D"],"answer":"②B","explanation":"해설"},
+{"id":16,"type":"vocabulary","word":"단어1","question":"'단어1'의 뜻은?","options":["①A","②B","③C","④D"],"answer":"①A","explanation":"이 단어가 책에서 어떻게 쓰였는지"},
+{"id":17,"type":"vocabulary","word":"단어2","question":"'단어2'의 뜻은?","options":["①A","②B","③C","④D"],"answer":"③C","explanation":"해설"},
+{"id":18,"type":"vocabulary","word":"단어3","question":"'단어3'의 뜻은?","options":["①A","②B","③C","④D"],"answer":"②B","explanation":"해설"},
+{"id":19,"type":"vocabulary","word":"단어4","question":"'단어4'의 뜻은?","options":["①A","②B","③C","④D"],"answer":"④D","explanation":"해설"},
+{"id":20,"type":"vocabulary","word":"단어5","question":"'단어5'의 뜻은?","options":["①A","②B","③C","④D"],"answer":"①A","explanation":"해설"},
+{"id":21,"type":"vocabulary","word":"단어6","question":"'단어6'의 뜻은?","options":["①A","②B","③C","④D"],"answer":"②B","explanation":"해설"},
+{"id":22,"type":"vocabulary","word":"단어7","question":"'단어7'의 뜻은?","options":["①A","②B","③C","④D"],"answer":"③C","explanation":"해설"},
+{"id":23,"type":"vocabulary","word":"단어8","question":"'단어8'의 뜻은?","options":["①A","②B","③C","④D"],"answer":"①A","explanation":"해설"},
+{"id":24,"type":"vocabulary","word":"단어9","question":"'단어9'의 뜻은?","options":["①A","②B","③C","④D"],"answer":"④D","explanation":"해설"},
+{"id":25,"type":"vocabulary","word":"단어10","question":"'단어10'의 뜻은?","options":["①A","②B","③C","④D"],"answer":"②B","explanation":"해설"}
+]}
+STRICT ORDER: OX(5)→content(5)→fill_blank(5)→vocabulary(10). Total 25 questions.
+book_found:false if you don't know this book's actual content.`;
+
+const TL={content:"📖 내용 이해",ox:"⭕ OX 퀴즈",vocabulary:"📝 단어 문제",fill_blank:"✏️ 빈칸 채우기"};
+const TB={content:"#FFF3E0",ox:"#E8F5E9",vocabulary:"#E3F2FD",fill_blank:"#FCE4EC"};
+const TC={content:"#FF8F00",ox:"#2E7D32",vocabulary:"#1565C0",fill_blank:"#C62828"};
+const KS="bq_gkey";
+const RS="bq_records";
+
+const USERS=[
+  {name:"에스더", emoji:"🌸", color:"#E91E63"},
+  {name:"노아",   emoji:"⚡", color:"#1565C0"}
+];
+
+function getRecords(user){try{return JSON.parse(localStorage.getItem(RS+"_"+user)||"[]");}catch{return[];}}
+function saveRecord(user,r){const a=getRecords(user);a.unshift(r);localStorage.setItem(RS+"_"+user,JSON.stringify(a.slice(0,200)));}
+function delRecord(user,i){const a=getRecords(user);a.splice(i,1);localStorage.setItem(RS+"_"+user,JSON.stringify(a));draw();}
+
+let st={
+  phase: localStorage.getItem(KS)?"select":"setup",
+  apiKey: localStorage.getItem(KS)||"",
+  keyInput:"",
+  currentUser: null,
+  imgData:null,imgPrev:null,
+  bookInfo:null,questions:[],
+  idx:0,answers:{},fill:"",shown:false,error:null
+};
+
+function set(p){Object.assign(st,p);draw();}
+
+async function callGemini(){
+  set({phase:"loading",error:null});
+  try{
+    const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${st.apiKey}`,{
+      method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        contents:[{parts:[
+          {text:PROMPT},
+          {inline_data:{mime_type:"image/jpeg",data:st.imgData}},
+          {text:"위 지시사항대로 이 책 표지를 보고 퀴즈 10개 만들어줘. JSON만 반환해."}
+        ]}],
+        generationConfig:{temperature:0.3,maxOutputTokens:2048,thinkingConfig:{thinkingBudget:0}}
+      })
+    });
+    const d=await r.json();
+    if(d.error)throw new Error(d.error.message);
+    const raw=d.candidates?.[0]?.content?.parts?.[0]?.text||"";
+    const clean=raw.replace(/```json|```/g,"").trim();
+    const start=clean.indexOf("{");const end=clean.lastIndexOf("}");
+    if(start===-1||end===-1)throw new Error("JSON을 찾을 수 없어요");
+    const parsed=JSON.parse(clean.slice(start,end+1));
+    if(!parsed.book_found){set({phase:"upload",error:"책을 인식하지 못했어요. 표지가 잘 보이게 다시 찍어주세요! 📸"});return;}
+    set({bookInfo:{title:parsed.book_title,author:parsed.author,lang:parsed.language||"ko"},
+      questions:parsed.questions,idx:0,answers:{},phase:"quiz"});
+  }catch(e){set({phase:"upload",error:"오류: "+e.message});}
+}
+
+function loadImg(file){
+  if(!file)return;
+  const rd=new FileReader();
+  rd.onload=e=>{
+    const img=new Image();
+    img.onload=()=>{
+      const c=document.createElement("canvas");
+      const M=1024;let[w,h]=[img.width,img.height];
+      if(w>M||h>M){if(w>h){h=Math.round(h*M/w);w=M;}else{w=Math.round(w*M/h);h=M;}}
+      c.width=w;c.height=h;c.getContext("2d").drawImage(img,0,0,w,h);
+      const u=c.toDataURL("image/jpeg",.85);
+      set({imgData:u.split(",")[1],imgPrev:u,error:null});
+    };
+    img.src=e.target.result;
+  };
+  rd.readAsDataURL(file);
+}
+
+function ans(qid,v){set({answers:{...st.answers,[qid]:v},shown:true});}
+function doFill(){if(st.fill.trim())ans(st.questions[st.idx].id,st.fill.trim());}
+function goNext(){set({shown:false,fill:"",idx:st.idx+1>=st.questions.length?st.idx:st.idx+1,phase:st.idx+1>=st.questions.length?"result":"quiz"});}
+
+function isOk(q){
+  const a=st.answers[q.id];if(!a)return false;
+  if(q.type==="ox")return(a==="O")===q.answer;
+  return a===q.answer;
+}
+
+function saveKey(){
+  const k=(st.keyInput||"").trim();
+  if(!k.startsWith("AIza")){set({error:"Gemini API 키는 AIza 로 시작해요"});return;}
+  localStorage.setItem(KS,k);
+  set({apiKey:k,phase:"select",error:null});
+}
+
+const btn=(bg,c="white",ex="")=>`width:100%;padding:14px 0;border-radius:13px;border:none;background:${bg};color:${c};font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;${ex}`;
+const err=()=>st.error?`<div style="background:#FFEBEE;border:2px solid #EF9A9A;border-radius:12px;padding:12px 16px;margin-bottom:14px;color:#C62828;font-size:14px;text-align:center">${st.error}</div>`:"";
+
+function draw(){
+  const {phase,apiKey,imgPrev,bookInfo,questions,idx,shown,fill,error}=st;
+  const q=questions[idx];
+  const ok=q?isOk(q):false;
+  const app=document.getElementById("app");
+
+  /* ── USER SELECT ── */
+  if(phase==="select"){
+    const userCards=USERS.map((u,i)=>{
+      const recs=getRecords(u.name);
+      const avg=recs.length?Math.round(recs.reduce((a,r)=>a+r.pct,0)/recs.length):null;
+      return `<button data-user="${i}" style="width:100%;background:white;border:3px solid ${u.color}33;border-radius:24px;padding:22px 24px;margin-bottom:14px;cursor:pointer;text-align:left;display:flex;align-items:center;gap:16px;box-shadow:0 4px 16px rgba(0,0,0,.08)">
+        <div style="width:60px;height:60px;border-radius:50%;background:${u.color}18;display:flex;align-items:center;justify-content:center;font-size:32px;flex-shrink:0">${u.emoji}</div>
+        <div style="flex:1">
+          <p style="margin:0 0 5px;font-size:22px;font-weight:900;color:${u.color}">${u.name}</p>
+          <p style="margin:0;font-size:13px;color:#AAA">읽은 책 ${recs.length}권${avg!==null?" · 평균 "+avg+"%":""}</p>
+        </div>
+        <span style="font-size:26px;color:${u.color}">→</span>
+      </button>`;
+    }).join("");
+
+    app.innerHTML=`
+    <div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px">
+      <div style="max-width:400px;width:100%">
+        <div style="text-align:center;margin-bottom:32px">
+          <div style="font-size:52px">📚</div>
+          <h1 style="margin-top:8px;font-size:26px;font-weight:900;color:#4A148C">책 읽기 퀴즈</h1>
+          <p style="margin-top:6px;font-size:15px;color:#7B1FA2">누가 풀건가요?</p>
+        </div>
+        ${userCards}
+        <div style="text-align:center;margin-top:20px">
+          <button id="chkey2" style="background:none;border:none;color:#ccc;font-size:12px;cursor:pointer;font-family:inherit">API 키 변경</button>
+        </div>
+      </div>
+    </div>`;
+    document.querySelectorAll("[data-user]").forEach(b=>{
+      b.addEventListener("click",()=>{
+        const u=USERS[parseInt(b.dataset.user)];
+        set({currentUser:u.name,phase:"upload",imgData:null,imgPrev:null,error:null});
+      });
+    });
+    document.getElementById("chkey2").addEventListener("click",()=>{localStorage.removeItem(KS);set({apiKey:"",phase:"setup"});});
+    return;
+  }
+
+  /* ── ADD USER ── (제거됨) */
+
+  /* ── SETUP ── */
+  if(phase==="setup"||!apiKey){
+    app.innerHTML=`
+    <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px">
+      <div style="background:white;border-radius:20px;padding:28px 22px;box-shadow:0 4px 20px rgba(0,0,0,.08);max-width:380px;width:100%">
+        <div style="text-align:center;margin-bottom:20px">
+          <div style="font-size:48px">🔑</div>
+          <h2 style="margin-top:8px;color:#4A148C;font-size:20px;font-weight:900">Gemini API 키 설정</h2>
+          <p style="margin-top:10px;font-size:13px;color:#666;line-height:1.8">
+            ① <a href="https://aistudio.google.com" target="_blank" style="color:#7B1FA2;font-weight:700">aistudio.google.com</a> 접속<br/>
+            ② 구글 로그인 → <b>Get API Key</b><br/>
+            ③ <b>Create API key</b> → 복사<br/>
+            <span style="color:#2E7D32;font-weight:700;font-size:14px">✅ 완전 무료 · 카드 등록 없음</span>
+          </p>
+        </div>
+        ${err()}
+        <input id="ki" type="password" placeholder="AIza..." value=""
+          style="width:100%;padding:13px 14px;border-radius:12px;border:2px solid #CE93D8;font-size:14px;font-family:inherit;margin-bottom:10px"/>
+        <button id="sk" style="${btn("linear-gradient(135deg,#7B1FA2,#E91E63)","white","padding:14px 0")}">저장하고 시작하기 →</button>
+      </div>
+    </div>`;
+    document.getElementById("ki").addEventListener("input",e=>st.keyInput=e.target.value);
+    document.getElementById("ki").addEventListener("keydown",e=>e.key==="Enter"&&saveKey());
+    document.getElementById("sk").addEventListener("click",saveKey);
+    return;
+  }
+
+  /* ── UPLOAD ── */
+  if(phase==="upload"){
+    app.innerHTML=`
+    <div style="min-height:100vh;padding:20px 16px">
+      <div style="text-align:center;margin-bottom:24px">
+        <div style="font-size:40px">📚</div>
+        <h1 style="margin-top:4px;font-size:24px;font-weight:900;color:#4A148C">책 읽기 퀴즈</h1>
+        <p style="margin-top:4px;font-size:13px;color:#7B1FA2">책 표지를 찍으면 문제가 짠! ✨</p>
+        <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-top:10px">
+          ${(()=>{const u=USERS.find(u=>u.name===st.currentUser)||USERS[0];return `<span style="background:${u.color};color:white;border-radius:99px;padding:5px 14px;font-size:13px;font-weight:700">${u.emoji} ${u.name}</span>`;})()}
+          <button id="switchuser" style="background:white;border:2px solid #CE93D8;color:#7B1FA2;border-radius:99px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer">바꾸기</button>
+          <button id="gorecup" style="background:white;border:2px solid #CE93D8;color:#7B1FA2;border-radius:99px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer">📋 기록(${getRecords(st.currentUser||'').length})</button>
+        </div>
+      </div>
+      <div style="max-width:400px;margin:0 auto">
+        ${err()}
+        <div style="border:3px ${imgPrev?"solid":"dashed"} #CE93D8;border-radius:20px;padding:${imgPrev?"12px":"32px 20px"};text-align:center;background:${imgPrev?"white":"#FDF6FF"};margin-bottom:14px">
+          ${imgPrev
+            ?`<img src="${imgPrev}" style="max-width:100%;max-height:260px;border-radius:12px;object-fit:contain"/><p style="margin-top:8px;font-size:13px;color:#7B1FA2;font-weight:600">✅ 사진 선택됨!</p>`
+            :`<div style="font-size:56px">📷</div><p style="margin-top:12px;font-weight:700;color:#7B1FA2;font-size:16px">아래 버튼으로 사진을 선택해주세요</p>`}
+        </div>
+        <div style="display:flex;gap:10px;margin-bottom:14px">
+          <label class="file-btn" style="flex:1;background:#7B1FA2;color:white">
+            📸 카메라로 찍기
+            <input type="file" accept="image/*" capture="environment" id="cam"/>
+          </label>
+          <label class="file-btn" style="flex:1;background:white;color:#7B1FA2;border:2px solid #7B1FA2">
+            🖼️ 사진 고르기
+            <input type="file" accept="image/*" id="gal"/>
+          </label>
+        </div>
+        ${imgPrev?`<button id="start" style="${btn("linear-gradient(135deg,#7B1FA2,#E91E63)","white","padding:16px 0;font-size:17px;font-weight:900;box-shadow:0 4px 16px rgba(123,31,162,.4)")}">🎯 퀴즈 시작하기!</button>`:""}
+        <div style="text-align:center;margin-top:16px">
+          <button id="chkey" style="background:none;border:none;color:#ccc;font-size:12px;cursor:pointer;font-family:inherit">API 키 변경</button>
+        </div>
+      </div>
+    </div>`;
+    document.getElementById("cam").addEventListener("change",e=>loadImg(e.target.files[0]));
+    document.getElementById("gal").addEventListener("change",e=>loadImg(e.target.files[0]));
+    document.getElementById("chkey").addEventListener("click",()=>{localStorage.removeItem(KS);set({apiKey:"",phase:"setup"});});
+    document.getElementById("switchuser").addEventListener("click",()=>set({phase:"select",imgData:null,imgPrev:null}));
+    document.getElementById("gorecup").addEventListener("click",()=>set({phase:"records"}));
+    if(imgPrev)document.getElementById("start").addEventListener("click",callGemini);
+    return;
+  }
+
+  /* ── LOADING ── */
+  if(phase==="loading"){
+    app.innerHTML=`
+    <div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px">
+      <div class="spin" style="font-size:64px">🔍</div>
+      <p style="margin-top:20px;font-size:18px;font-weight:700;color:#4A148C">책을 읽고 있어요...</p>
+      <p style="margin-top:6px;font-size:14px;color:#7B1FA2">잠깐만 기다려주세요! ✨</p>
+      ${imgPrev?`<img src="${imgPrev}" style="width:120px;border-radius:12px;margin-top:16px;opacity:.7"/>`:""}
+    </div>`;
+    return;
+  }
+
+  /* ── QUIZ ── */
+  if(phase==="quiz"&&q){
+    const pct=Math.round(((idx+1)/questions.length)*100);
+    let body="";
+    if(!shown){
+      if(q.type==="ox"){
+        body=`<div style="display:flex;gap:12px">
+          <button id="ao" style="flex:1;padding:22px 0;font-size:38px;border-radius:16px;border:3px solid #2E7D32;background:white;cursor:pointer;font-weight:900;color:#2E7D32">O</button>
+          <button id="ax" style="flex:1;padding:22px 0;font-size:38px;border-radius:16px;border:3px solid #C62828;background:white;cursor:pointer;font-weight:900;color:#C62828">X</button>
+        </div>`;
+      }else{
+        body=`<div style="display:flex;flex-direction:column;gap:10px">`+
+          q.options.map((o,i)=>`<button data-opt="${i}" style="padding:13px 16px;border-radius:12px;border:2px solid #E0E0E0;background:white;cursor:pointer;text-align:left;font-size:14px;font-weight:600;color:#333;font-family:inherit">${o}</button>`).join("")+
+          `</div>`;
+      }
+    }else{
+      body=`<div style="border-radius:14px;padding:16px;background:${ok?"#E8F5E9":"#FFEBEE"};border:2px solid ${ok?"#4CAF50":"#EF5350"}">
+        <p style="margin:0 0 8px;font-size:22px;font-weight:900;color:${ok?"#2E7D32":"#C62828"}">${ok?"🎉 정답이에요!":"😅 틀렸어요!"}</p>
+        ${!ok?`<p style="margin:0 0 6px;font-size:14px;font-weight:700;color:#333">정답: <span style="color:#C62828">${q.type==="ox"?(q.answer?"O":"X"):q.answer}</span></p>`:""}
+        <p style="margin:0;font-size:13px;color:#555;line-height:1.7">${q.explanation}</p>
+        <button id="nxt" style="${btn(ok?"#2E7D32":"#1565C0","white","margin-top:14px")}">${idx+1>=questions.length?"🏆 결과 보기":"다음 문제 →"}</button>
+      </div>`;
+    }
+
+    app.innerHTML=`
+    <div style="min-height:100vh;padding:20px 16px">
+      <div style="max-width:440px;margin:0 auto">
+        <div style="background:white;border-radius:16px;padding:12px 16px;margin-bottom:14px;display:flex;gap:12px;align-items:center;box-shadow:0 2px 12px rgba(0,0,0,.08)">
+          ${imgPrev?`<img src="${imgPrev}" style="width:44px;height:56px;object-fit:cover;border-radius:6px"/>`:""}
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+              <p style="margin:0;font-weight:900;font-size:14px;color:#1A237E">${bookInfo?.title||""}</p>
+              <span style="font-size:11px;font-weight:700;padding:2px 7px;border-radius:99px;white-space:nowrap;background:${bookInfo?.lang==="en"?"#E3F2FD":"#E8EAF6"};color:${bookInfo?.lang==="en"?"#1565C0":"#3949AB"}">${bookInfo?.lang==="en"?"🇺🇸 English":"🇰🇷 국어"}</span>
+            </div>
+            ${bookInfo?.author?`<p style="margin:2px 0 0;font-size:12px;color:#7986CB">${bookInfo.author}</p>`:""}
+          </div>
+        </div>
+        <div style="margin-bottom:14px">
+          <div style="display:flex;justify-content:space-between;font-size:12px;color:#888;margin-bottom:6px">
+            <span style="font-weight:700;color:${TC[q.type]}">${TL[q.type]}</span>
+            <span>${idx+1} / ${questions.length}</span>
+          </div>
+          <div style="height:8px;border-radius:99px;background:#E0E0E0;overflow:hidden">
+            <div style="height:100%;border-radius:99px;background:linear-gradient(90deg,${TC[q.type]},${TC[q.type]}88);width:${pct}%;transition:width .4s"></div>
+          </div>
+        </div>
+        <div style="background:${TB[q.type]};border:2px solid ${TC[q.type]}33;border-radius:20px;padding:20px 18px;box-shadow:0 4px 20px rgba(0,0,0,.07)">
+          <p style="margin:0 0 20px;font-size:16px;font-weight:700;color:#212121;line-height:1.7">Q${q.id}. ${q.question}</p>
+          ${body}
+        </div>
+      </div>
+    </div>`;
+
+    if(!shown){
+      if(q.type==="ox"){
+        document.getElementById("ao").addEventListener("click",()=>ans(q.id,"O"));
+        document.getElementById("ax").addEventListener("click",()=>ans(q.id,"X"));
+      }else{
+        document.querySelectorAll("[data-opt]").forEach((b,i)=>b.addEventListener("click",()=>ans(q.id,q.options[i])));
+      }
+    }else{
+      document.getElementById("nxt").addEventListener("click",goNext);
+    }
+    return;
+  }
+
+  /* ── RESULT ── */
+  if(phase==="result"){
+    const s=questions.filter(isOk).length;
+    const pct=Math.round((s/questions.length)*100);
+    const em=pct>=90?"🏆":pct>=70?"⭐":pct>=50?"👍":"💪";
+    const mg=pct>=90?"완벽해요! 천재다!":pct>=70?"잘했어요!":pct>=50?"조금 더 읽어볼까요?":"다시 한번 읽어봐요!";
+    const grid=Object.entries(TL).map(([t,l])=>{
+      const qs=questions.filter(q=>q.type===t);
+      const c=qs.filter(isOk).length;
+      return `<div style="background:${TB[t]};border-radius:12px;padding:12px;text-align:center">
+        <p style="font-size:12px;font-weight:700;color:${TC[t]};margin-bottom:4px">${l}</p>
+        <p style="font-size:18px;font-weight:900;color:#333">${c}/${qs.length}</p>
+      </div>`;
+    }).join("");
+
+    // 자동 저장
+    const rec={
+      title:bookInfo?.title||"",author:bookInfo?.author||"",
+      lang:bookInfo?.lang||"ko",score:s,total:questions.length,pct,
+      thumb:st.imgPrev||null,
+      date:new Date().toLocaleDateString("ko-KR",{month:"long",day:"numeric"})
+    };
+    // 중복 저장 방지 (같은 세션에서 한 번만)
+    if(!st._saved){saveRecord(st.currentUser||"user",rec);st._saved=true;}
+
+    app.innerHTML=`
+    <div style="min-height:100vh;padding:20px 16px">
+      <div style="max-width:400px;margin:0 auto;text-align:center">
+        <div style="background:white;border-radius:24px;padding:32px 24px;box-shadow:0 8px 32px rgba(0,0,0,.1);margin-bottom:12px">
+          <div style="font-size:72px">${em}</div>
+          <p style="margin:6px 0 2px;font-size:13px;color:#9C27B0;font-weight:600">📖 ${bookInfo?.title||""}</p>
+          <h2 style="margin:8px 0 4px;font-size:26px;font-weight:900;color:#4A148C">${s}점 / ${questions.length}점</h2>
+          <p style="margin:0 0 16px;font-size:16px;color:#7B1FA2;font-weight:700">${mg}</p>
+          <div style="height:16px;border-radius:99px;background:#EDE7F6;overflow:hidden;margin-bottom:20px">
+            <div style="height:100%;border-radius:99px;background:linear-gradient(90deg,#7B1FA2,#E91E63);width:${pct}%;transition:width 1s"></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">${grid}</div>
+          <p style="font-size:12px;color:#AAA">✅ 독서 기록이 저장됐어요!</p>
+        </div>
+        <div style="display:flex;gap:10px;margin-bottom:10px">
+          <button id="again" style="${btn("linear-gradient(135deg,#7B1FA2,#E91E63)","white","flex:1;padding:14px 0;font-size:15px;font-weight:900")}">📚 다른 책 풀기</button>
+          <button id="gorec" style="${btn("white","#7B1FA2","flex:1;padding:14px 0;font-size:15px;font-weight:900;border:2px solid #7B1FA2")}">📋 기록 보기</button>
+        </div>
+        <button id="govoc" style="${btn("linear-gradient(135deg,#1565C0,#00ACC1)","white","padding:14px 0;font-size:15px;font-weight:900;margin-bottom:10px")}">📖 이 책 단어장 복습하기</button>
+        <a href="https://www.youtube.com/results?search_query=${encodeURIComponent((bookInfo?.title||"")+" 책 읽어주기")}" target="_blank"
+          style="display:block;width:100%;padding:14px 0;border-radius:13px;background:white;border:2px solid #FF0000;color:#FF0000;font-size:15px;font-weight:900;text-align:center;text-decoration:none;box-sizing:border-box">
+          ▶️ 유튜브에서 이 책 보기
+        </a>
+      </div>
+    </div>`;
+    document.getElementById("again").addEventListener("click",()=>set({phase:"upload",imgData:null,imgPrev:null,error:null,_saved:false}));
+    document.getElementById("gorec").addEventListener("click",()=>set({phase:"records"}));
+    document.getElementById("govoc").addEventListener("click",()=>set({phase:"vocab"}));
+    return;
+  }
+
+  /* ── VOCAB REVIEW ── */
+  if(phase==="vocab"){
+    const vocabQs=questions.filter(q=>q.type==="vocabulary");
+    const cards=vocabQs.map(q=>{
+      const correct=isOk(q);
+      // 정답 선택지에서 뜻 추출 (①뜻 형태에서 번호 제거)
+      const meaning=q.answer.replace(/^[①②③④]\s*/,"");
+      return `<div style="background:white;border-radius:16px;padding:16px 18px;margin-bottom:10px;box-shadow:0 2px 12px rgba(0,0,0,.07);border-left:4px solid ${correct?"#2E7D32":"#E91E63"}">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <span style="font-size:18px;font-weight:900;color:#1565C0">${q.word||"단어"}</span>
+          <span style="font-size:11px;padding:2px 8px;border-radius:99px;font-weight:700;background:${correct?"#E8F5E9":"#FCE4EC"};color:${correct?"#2E7D32":"#C62828"}">${correct?"✅ 맞았어요":"❌ 틀렸어요"}</span>
+        </div>
+        <p style="margin:0 0 6px;font-size:14px;font-weight:700;color:#333">뜻: ${meaning}</p>
+        <p style="margin:0;font-size:12px;color:#888;line-height:1.6">${q.explanation}</p>
+      </div>`;
+    }).join("");
+
+    const vocabScore=vocabQs.filter(isOk).length;
+    app.innerHTML=`
+    <div style="min-height:100vh;padding:20px 16px">
+      <div style="max-width:440px;margin:0 auto">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+          <button id="back" style="background:none;border:none;font-size:22px;cursor:pointer">←</button>
+          <div style="flex:1">
+            <h1 style="font-size:18px;font-weight:900;color:#1565C0">📖 단어장</h1>
+            <p style="font-size:12px;color:#888;margin-top:2px">${bookInfo?.title||""} · ${vocabQs.length}개 단어</p>
+          </div>
+          <span style="font-size:13px;font-weight:700;color:#1565C0">${vocabScore}/${vocabQs.length} 맞음</span>
+        </div>
+
+        <div style="background:white;border-radius:14px;padding:14px 16px;margin-bottom:14px;box-shadow:0 2px 10px rgba(0,0,0,.07)">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <span style="font-size:13px;font-weight:700;color:#555">단어 점수</span>
+            <span style="font-size:16px;font-weight:900;color:#1565C0">${Math.round(vocabScore/vocabQs.length*100)}%</span>
+          </div>
+          <div style="height:8px;border-radius:99px;background:#E3F2FD;overflow:hidden">
+            <div style="height:100%;border-radius:99px;background:linear-gradient(90deg,#1565C0,#00ACC1);width:${Math.round(vocabScore/vocabQs.length*100)}%;transition:width 1s"></div>
+          </div>
+        </div>
+
+        ${cards}
+
+        <button id="again2" style="${btn("linear-gradient(135deg,#7B1FA2,#E91E63)","white","padding:14px 0;font-size:15px;font-weight:900;margin-top:4px;margin-bottom:10px")}">📚 다른 책 퀴즈 풀기</button>
+        <a href="https://www.youtube.com/results?search_query=${encodeURIComponent((bookInfo?.title||"")+" 책 읽어주기")}" target="_blank"
+          style="display:block;width:100%;padding:14px 0;border-radius:13px;background:white;border:2px solid #FF0000;color:#FF0000;font-size:15px;font-weight:900;text-align:center;text-decoration:none;box-sizing:border-box">
+          ▶️ 유튜브에서 이 책 보기
+        </a>
+      </div>
+    </div>`;
+    document.getElementById("back").addEventListener("click",()=>set({phase:"result"}));
+    document.getElementById("again2").addEventListener("click",()=>set({phase:"upload",imgData:null,imgPrev:null,error:null,_saved:false}));
+    return;
+  }
+
+  /* ── RECORDS ── */
+  if(phase==="records"){
+    const recs=getRecords(st.currentUser||"user");
+    const rows=recs.length===0
+      ? `<div style="text-align:center;padding:40px 20px;color:#AAA">
+           <div style="font-size:48px;margin-bottom:12px">📭</div>
+           <p style="font-weight:600">아직 기록이 없어요.<br/>퀴즈를 풀면 자동으로 저장돼요!</p>
+         </div>`
+      : recs.map((r,i)=>{
+          const bar=Math.round((r.score/r.total)*100);
+          const col=bar>=90?"#2E7D32":bar>=70?"#F57F17":bar>=50?"#1565C0":"#C62828";
+          return `<div style="background:white;border-radius:16px;padding:14px 16px;margin-bottom:10px;display:flex;gap:12px;align-items:center;box-shadow:0 2px 10px rgba(0,0,0,.07)">
+            ${r.thumb?`<img src="${r.thumb}" style="width:44px;height:56px;object-fit:cover;border-radius:8px;flex-shrink:0"/>`:`<div style="width:44px;height:56px;background:#EDE7F6;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">📖</div>`}
+            <div style="flex:1;min-width:0">
+              <p style="margin:0 0 2px;font-weight:900;font-size:14px;color:#1A237E;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.title}</p>
+              <p style="margin:0 0 6px;font-size:11px;color:#888">${r.date} · ${r.lang==="en"?"🇺🇸 English":"🇰🇷 국어"}</p>
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="flex:1;height:6px;border-radius:99px;background:#EEE;overflow:hidden">
+                  <div style="height:100%;border-radius:99px;background:${col};width:${bar}%"></div>
+                </div>
+                <span style="font-size:13px;font-weight:900;color:${col};white-space:nowrap">${r.score}/${r.total}</span>
+              </div>
+            </div>
+            <button data-del="${i}" style="background:none;border:none;color:#DDD;font-size:18px;cursor:pointer;padding:4px;flex-shrink:0">🗑️</button>
+          </div>`;
+        }).join("");
+
+    const total_books=recs.length;
+    const avg=recs.length?Math.round(recs.reduce((a,r)=>a+r.pct,0)/recs.length):0;
+
+    app.innerHTML=`
+    <div style="min-height:100vh;padding:20px 16px">
+      <div style="max-width:440px;margin:0 auto">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+          <button id="back" style="background:none;border:none;font-size:22px;cursor:pointer">←</button>
+          <h1 style="font-size:20px;font-weight:900;color:#4A148C;flex:1">📋 ${st.currentUser||""} 독서 기록</h1>
+          <span style="font-size:13px;color:#888">총 ${total_books}권</span>
+        </div>
+        ${recs.length>0?`
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+          <div style="background:white;border-radius:14px;padding:14px;text-align:center;box-shadow:0 2px 10px rgba(0,0,0,.07)">
+            <p style="font-size:12px;color:#888;margin-bottom:4px">읽은 책</p>
+            <p style="font-size:24px;font-weight:900;color:#4A148C">${total_books}권</p>
+          </div>
+          <div style="background:white;border-radius:14px;padding:14px;text-align:center;box-shadow:0 2px 10px rgba(0,0,0,.07)">
+            <p style="font-size:12px;color:#888;margin-bottom:4px">평균 점수</p>
+            <p style="font-size:24px;font-weight:900;color:#E91E63">${avg}%</p>
+          </div>
+        </div>`:``}
+        ${rows}
+      </div>
+    </div>`;
+    document.getElementById("back").addEventListener("click",()=>set({phase:"upload",imgData:null,imgPrev:null,error:null}));
+    document.querySelectorAll("[data-del]").forEach(b=>b.addEventListener("click",()=>{
+      if(confirm("이 기록을 삭제할까요?"))delRecord(st.currentUser||"user",parseInt(b.dataset.del));
+    }));
+    return;
+  }
+}
+
+draw();
+</script>
+</body>
+</html>
