@@ -197,35 +197,39 @@ function set(p){
   draw();
 }
 
-async function callGPT(imgData, retry=0){
-  const r=await fetch("https://api.openai.com/v1/chat/completions",{
-    method:"POST",
-    headers:{"Content-Type":"application/json","Authorization":`Bearer ${st.apiKey}`},
+async function callAPI(imgData, retry=0, modelIdx=0){
+  const MODELS=["gemini-2.0-flash","gemini-1.5-flash","gemini-2.5-flash"];
+  const model=MODELS[modelIdx];
+  const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${st.apiKey}`,{
+    method:"POST",headers:{"Content-Type":"application/json"},
     body:JSON.stringify({
-      model:"gpt-4o-mini",
-      max_tokens:3000,
-      messages:[{
-        role:"user",
-        content:[
-          {type:"text",text:PROMPT_ALL},
-          {type:"image_url",image_url:{url:`data:image/jpeg;base64,${imgData}`,detail:"low"}},
-          {type:"text",text:"JSON만 반환해."}
-        ]
-      }]
+      contents:[{parts:[
+        {text:PROMPT_ALL},
+        {inline_data:{mime_type:"image/jpeg",data:imgData}},
+        {text:"JSON만 반환해."}
+      ]}],
+      generationConfig:{temperature:0.3,maxOutputTokens:3000}
     })
   });
   const d=await r.json();
   if(d.error){
-    if((d.error.code==="rate_limit_exceeded"||d.error.type==="requests")&&retry<2){
-      const wait=10+retry*10;
+    const code=d.error.code;
+    const msg=d.error.message||"";
+    if((code===429||code===503||msg.includes("quota")||msg.includes("high demand"))&&modelIdx<MODELS.length-1){
+      set({_retryMsg:`${model} → ${MODELS[modelIdx+1]} 전환 중...`});
+      await new Promise(res=>setTimeout(res,2000));
+      return callAPI(imgData,0,modelIdx+1);
+    }
+    if(retry<2){
+      const wait=15+retry*15;
       set({_retryMsg:`잠시 후 재시도... (${wait}초)`});
       await new Promise(res=>setTimeout(res,wait*1000));
       set({_retryMsg:null});
-      return callGPT(imgData, retry+1);
+      return callAPI(imgData,retry+1,modelIdx);
     }
     throw new Error(d.error.message);
   }
-  const raw=d.choices?.[0]?.message?.content||"";
+  const raw=d.candidates?.[0]?.content?.parts?.[0]?.text||"";
   const clean=raw.replace(/```json|```/g,"").trim();
   const s=clean.indexOf("{"),e=clean.lastIndexOf("}");
   if(s===-1||e===-1)throw new Error("JSON 파싱 실패");
@@ -235,7 +239,7 @@ async function callGPT(imgData, retry=0){
 async function callGemini(){
   set({phase:"loading",error:null});
   try{
-    const parsed=await callGPT(st.imgData);
+    const parsed=await callAPI(st.imgData);
     if(!parsed.book_found){set({phase:"upload",error:"책을 인식하지 못했어요. 표지가 잘 보이게 다시 찍어주세요! 📸"});return;}
     set({
       bookInfo:{title:parsed.book_title,author:parsed.author,lang:parsed.language||"ko"},
@@ -330,7 +334,7 @@ function isOkCurrent(q){
 
 function saveKey(){
   const k=(st.keyInput||"").trim();
-  if(!k.startsWith("sk-")){set({error:"OpenAI API 키는 sk- 로 시작해요"});return;}
+  if(!k.startsWith("AIza")){set({error:"Gemini API 키는 AIza 로 시작해요"});return;}
   localStorage.setItem(KS,k);
   set({apiKey:k,phase:"select",error:null});
 }
@@ -425,16 +429,16 @@ function draw(){
       <div style="background:white;border-radius:20px;padding:28px 22px;box-shadow:0 4px 20px rgba(0,0,0,.08);max-width:380px;width:100%">
         <div style="text-align:center;margin-bottom:20px">
           <div style="font-size:48px">🔑</div>
-          <h2 style="margin-top:8px;color:#4A148C;font-size:20px;font-weight:900">API 키 설정</h2>
+          <h2 style="margin-top:8px;color:#4A148C;font-size:20px;font-weight:900">Gemini API 키 설정</h2>
           <p style="margin-top:10px;font-size:13px;color:#666;line-height:1.8">
-            ① <a href="https://platform.openai.com/api-keys" target="_blank" style="color:#7B1FA2;font-weight:700">platform.openai.com/api-keys</a> 접속<br/>
+            ① <a href="https://aistudio.google.com" target="_blank" style="color:#7B1FA2;font-weight:700">aistudio.google.com</a> 접속<br/>
             ② 구글 로그인 → <b>Get API Key</b><br/>
             ③ <b>Create API key</b> → 복사<br/>
-            <span style="color:#2E7D32;font-weight:700;font-size:14px">✅ gpt-4o-mini 사용</span>
+            <span style="color:#2E7D32;font-weight:700;font-size:14px">✅ 무료 사용 가능</span>
           </p>
         </div>
         ${err()}
-        <input id="ki" type="password" placeholder="sk-...." value=""
+        <input id="ki" type="password" placeholder="AIza..." value=""
           style="width:100%;padding:13px 14px;border-radius:12px;border:2px solid #CE93D8;font-size:14px;font-family:inherit;margin-bottom:10px"/>
         <button id="sk" style="${btn("linear-gradient(135deg,#7B1FA2,#E91E63)","white","padding:14px 0")}">저장하고 시작하기 →</button>
       </div>
@@ -481,7 +485,7 @@ function draw(){
         <div style="margin-top:20px;border-top:1px solid #EEE;padding-top:16px">
           <p style="font-size:12px;color:#BBB;text-align:center;margin-bottom:8px">🔑 API 키 변경 (붙여넣기 후 저장)</p>
           <div style="display:flex;gap:8px">
-            <input id="inlinekey" type="text" placeholder="sk-.... 붙여넣기"
+            <input id="inlinekey" type="text" placeholder="AIza... 붙여넣기"
               style="flex:1;padding:10px 12px;border-radius:10px;border:2px solid #EEE;font-size:13px;font-family:inherit;color:#333;min-width:0"/>
             <button id="saveinlinekey" style="padding:10px 14px;border-radius:10px;border:none;background:#7B1FA2;color:white;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap">저장</button>
           </div>
@@ -496,7 +500,7 @@ function draw(){
     document.getElementById("saveinlinekey").addEventListener("click",()=>{
       const k=document.getElementById("inlinekey").value.trim();
       if(!k){alert("키를 입력해주세요");return;}
-      if(!k.startsWith("sk-")){alert("OpenAI API 키는 sk- 로 시작해요");return;}
+      if(!k.startsWith("AIza")){alert("Gemini API 키는 AIza 로 시작해요");return;}
       localStorage.setItem(KS,k);
       set({apiKey:k,error:null});
     });
