@@ -20,19 +20,13 @@
 <body>
 <div id="app"></div>
 <script>
-// 25문제 한번에 (OX5 + 내용이해5 + 빈칸5 + 단어10)
+// 1단계: OX5 + 내용이해5 = 10문제 (빠른 시작)
 const PROMPT1=`You are a reading quiz generator for 2nd graders.
 Step 1: Identify the book from the cover image.
-Step 2: Generate exactly 25 quiz questions using YOUR KNOWLEDGE of the story.
+Step 2: Generate exactly 10 quiz questions using YOUR KNOWLEDGE of the story.
 Language rule: Korean book→Korean questions, English book→English questions.
 Return JSON only, no markdown, no extra text.
-
-{
-"book_title":"",
-"author":"",
-"language":"ko",
-"book_found":true,
-"questions":[
+{"book_title":"","author":"","language":"ko","book_found":true,"questions":[
 {"id":1,"type":"ox","question":"","answer":true,"explanation":""},
 {"id":2,"type":"ox","question":"","answer":false,"explanation":""},
 {"id":3,"type":"ox","question":"","answer":true,"explanation":""},
@@ -42,24 +36,31 @@ Return JSON only, no markdown, no extra text.
 {"id":7,"type":"content","question":"","options":["①","②","③","④"],"answer":"②","explanation":""},
 {"id":8,"type":"content","question":"","options":["①","②","③","④"],"answer":"③","explanation":""},
 {"id":9,"type":"content","question":"","options":["①","②","③","④"],"answer":"④","explanation":""},
-{"id":10,"type":"content","question":"","options":["①","②","③","④"],"answer":"①","explanation":""},
-{"id":11,"type":"fill_blank","question":"[___]에 들어갈 말은?","options":["①","②","③","④"],"answer":"②","explanation":""},
-{"id":12,"type":"fill_blank","question":"[___]에 들어갈 말은?","options":["①","②","③","④"],"answer":"③","explanation":""},
-{"id":13,"type":"fill_blank","question":"[___]에 들어갈 말은?","options":["①","②","③","④"],"answer":"①","explanation":""},
-{"id":14,"type":"fill_blank","question":"[___]에 들어갈 말은?","options":["①","②","③","④"],"answer":"④","explanation":""},
-{"id":15,"type":"fill_blank","question":"[___]에 들어갈 말은?","options":["①","②","③","④"],"answer":"②","explanation":""},
-{"id":16,"type":"vocabulary","word":"","question":"","options":["①","②","③","④"],"answer":"①","explanation":""},
-{"id":17,"type":"vocabulary","word":"","question":"","options":["①","②","③","④"],"answer":"③","explanation":""},
-{"id":18,"type":"vocabulary","word":"","question":"","options":["①","②","③","④"],"answer":"②","explanation":""},
-{"id":19,"type":"vocabulary","word":"","question":"","options":["①","②","③","④"],"answer":"④","explanation":""},
-{"id":20,"type":"vocabulary","word":"","question":"","options":["①","②","③","④"],"answer":"①","explanation":""},
-{"id":21,"type":"vocabulary","word":"","question":"","options":["①","②","③","④"],"answer":"②","explanation":""},
-{"id":22,"type":"vocabulary","word":"","question":"","options":["①","②","③","④"],"answer":"③","explanation":""},
-{"id":23,"type":"vocabulary","word":"","question":"","options":["①","②","③","④"],"answer":"①","explanation":""},
-{"id":24,"type":"vocabulary","word":"","question":"","options":["①","②","③","④"],"answer":"④","explanation":""},
-{"id":25,"type":"vocabulary","word":"","question":"","options":["①","②","③","④"],"answer":"②","explanation":""}
+{"id":10,"type":"content","question":"","options":["①","②","③","④"],"answer":"①","explanation":""}
 ]}
-IMPORTANT: Fill ALL 25 questions with real story content. book_found:false if book is unknown.`;
+Fill ALL 10 questions with real story content. book_found:false if unknown.`;
+
+// 2단계: 빈칸5 + 단어10 = 15문제 (백그라운드)
+const PROMPT2=(title,lang)=>`Generate exactly 15 quiz questions about "${title}" for 2nd graders.
+Language: ${lang==="en"?"English":"Korean"}. Use real story content. JSON only, no extra text.
+{"questions":[
+{"id":11,"type":"fill_blank","question":"","options":["①","②","③","④"],"answer":"①","explanation":""},
+{"id":12,"type":"fill_blank","question":"","options":["①","②","③","④"],"answer":"②","explanation":""},
+{"id":13,"type":"fill_blank","question":"","options":["①","②","③","④"],"answer":"③","explanation":""},
+{"id":14,"type":"fill_blank","question":"","options":["①","②","③","④"],"answer":"④","explanation":""},
+{"id":15,"type":"fill_blank","question":"","options":["①","②","③","④"],"answer":"①","explanation":""},
+{"id":16,"type":"vocabulary","word":"","question":"","options":["①","②","③","④"],"answer":"②","explanation":""},
+{"id":17,"type":"vocabulary","word":"","question":"","options":["①","②","③","④"],"answer":"③","explanation":""},
+{"id":18,"type":"vocabulary","word":"","question":"","options":["①","②","③","④"],"answer":"①","explanation":""},
+{"id":19,"type":"vocabulary","word":"","question":"","options":["①","②","③","④"],"answer":"④","explanation":""},
+{"id":20,"type":"vocabulary","word":"","question":"","options":["①","②","③","④"],"answer":"②","explanation":""},
+{"id":21,"type":"vocabulary","word":"","question":"","options":["①","②","③","④"],"answer":"③","explanation":""},
+{"id":22,"type":"vocabulary","word":"","question":"","options":["①","②","③","④"],"answer":"①","explanation":""},
+{"id":23,"type":"vocabulary","word":"","question":"","options":["①","②","③","④"],"answer":"④","explanation":""},
+{"id":24,"type":"vocabulary","word":"","question":"","options":["①","②","③","④"],"answer":"②","explanation":""},
+{"id":25,"type":"vocabulary","word":"","question":"","options":["①","②","③","④"],"answer":"③","explanation":""}
+]}
+Fill ALL 15 questions with real story content.`;
 
 const TL={content:"📖 내용 이해",ox:"⭕ OX 퀴즈",vocabulary:"📝 단어 문제",fill_blank:"✏️ 빈칸 채우기"};
 const TB={content:"#FFF3E0",ox:"#E8F5E9",vocabulary:"#E3F2FD",fill_blank:"#FCE4EC"};
@@ -254,17 +255,36 @@ async function geminiReq(parts, modelIdx=0, retry=0){
 async function callGemini(){
   set({phase:"loading",error:null});
   try{
-    // 25문제 한번에 요청
+    // 1단계: OX5 + 내용이해5 = 10문제 (즉시 시작)
     const p1=await geminiReq([
       {text:PROMPT1},
       {inline_data:{mime_type:"image/jpeg",data:st.imgData}},
-      {text:"JSON만 반환해. 반드시 25개 questions 모두 채워서 반환해."}
+      {text:"JSON만 반환해."}
     ]);
     if(!p1.book_found){set({phase:"upload",error:"책을 인식하지 못했어요. 표지가 잘 보이게 다시 찍어주세요! 📸"});return;}
     if(!p1.questions||p1.questions.length===0){set({phase:"upload",error:"문제 생성에 실패했어요. 다시 시도해주세요."});return;}
 
     const bookInfo={title:p1.book_title,author:p1.author,lang:p1.language||"ko"};
-    set({bookInfo,questions:p1.questions,idx:0,answers:{},firstAnswers:{},phase:"quiz",_loadingMore:false});
+    // 10문제로 바로 퀴즈 시작
+    set({bookInfo,questions:p1.questions,idx:0,answers:{},firstAnswers:{},phase:"quiz",_loadingMore:true});
+
+    // 2단계: 빈칸5 + 단어10 = 15문제 (백그라운드)
+    try{
+      const p2=await geminiReq([
+        {text:PROMPT2(p1.book_title, p1.language||"ko")},
+        {text:"JSON만 반환해."}
+      ]);
+      const merged=[...p1.questions,...(p2.questions||[])];
+      if(st.phase==="quiz"){
+        set({questions:merged,_loadingMore:false});
+        if(st.shown && st.idx>=p1.questions.length-1) draw();
+      } else {
+        set({_loadingMore:false});
+      }
+    }catch(e2){
+      // 2단계 실패해도 10문제로 계속 진행
+      set({_loadingMore:false});
+    }
   }catch(e){set({phase:"upload",error:"오류: "+e.message});}
 }
 
@@ -588,7 +608,7 @@ function draw(){
         <div style="margin-bottom:14px">
           <div style="display:flex;justify-content:space-between;font-size:12px;color:#888;margin-bottom:6px">
             <span style="font-weight:700;color:${TC[q.type]}">${TL[q.type]}</span>
-            <span>${idx+1} / ${questions.length}문제</span>
+            <span>${idx+1} / ${questions.length}${st._loadingMore?` <span style="color:#FF8F00;font-size:11px">+로딩중...</span>`:""}문제</span>
           </div>
           <div style="height:8px;border-radius:99px;background:#E0E0E0;overflow:hidden">
             <div style="height:100%;border-radius:99px;background:linear-gradient(90deg,${TC[q.type]},${TC[q.type]}88);width:${pct}%;transition:width .4s"></div>
