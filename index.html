@@ -20,37 +20,27 @@
 <body>
 <div id="app"></div>
 <script>
-// 단일 프롬프트 - 25문제 한번에
-const PROMPT_ALL=`Reading quiz for 2nd graders. Identify book from cover. Use YOUR KNOWLEDGE of the actual story (not the cover) to create 25 questions.
-Language: Korean book→Korean, English→English. JSON only, no extra text.
+// 15문제 - 속도 최적화
+const PROMPT_ALL=`Quiz for 2nd graders. Identify book from cover. Use YOUR KNOWLEDGE of the story. 15 questions. Language: Korean→Korean, English→English. JSON only.
+IMPORTANT: Make OX answers varied (not alternating pattern). Make all answers realistic based on actual story.
 {"book_title":"","author":"","language":"ko","book_found":true,"questions":[
 {"id":1,"type":"ox","question":"","answer":true,"explanation":""},
-{"id":2,"type":"ox","question":"","answer":false,"explanation":""},
-{"id":3,"type":"ox","question":"","answer":true,"explanation":""},
-{"id":4,"type":"ox","question":"","answer":false,"explanation":""},
-{"id":5,"type":"ox","question":"","answer":true,"explanation":""},
-{"id":6,"type":"content","question":"","options":["①","②","③","④"],"answer":"①","explanation":""},
-{"id":7,"type":"content","question":"","options":["①","②","③","④"],"answer":"②","explanation":""},
-{"id":8,"type":"content","question":"","options":["①","②","③","④"],"answer":"③","explanation":""},
-{"id":9,"type":"content","question":"","options":["①","②","③","④"],"answer":"④","explanation":""},
-{"id":10,"type":"content","question":"","options":["①","②","③","④"],"answer":"①","explanation":""},
-{"id":11,"type":"fill_blank","question":"","options":["①","②","③","④"],"answer":"②","explanation":""},
-{"id":12,"type":"fill_blank","question":"","options":["①","②","③","④"],"answer":"③","explanation":""},
-{"id":13,"type":"fill_blank","question":"","options":["①","②","③","④"],"answer":"①","explanation":""},
-{"id":14,"type":"fill_blank","question":"","options":["①","②","③","④"],"answer":"④","explanation":""},
-{"id":15,"type":"fill_blank","question":"","options":["①","②","③","④"],"answer":"②","explanation":""},
-{"id":16,"type":"vocabulary","word":"","question":"","options":["①","②","③","④"],"answer":"①","explanation":""},
-{"id":17,"type":"vocabulary","word":"","question":"","options":["①","②","③","④"],"answer":"③","explanation":""},
-{"id":18,"type":"vocabulary","word":"","question":"","options":["①","②","③","④"],"answer":"②","explanation":""},
-{"id":19,"type":"vocabulary","word":"","question":"","options":["①","②","③","④"],"answer":"④","explanation":""},
-{"id":20,"type":"vocabulary","word":"","question":"","options":["①","②","③","④"],"answer":"①","explanation":""},
-{"id":21,"type":"vocabulary","word":"","question":"","options":["①","②","③","④"],"answer":"②","explanation":""},
-{"id":22,"type":"vocabulary","word":"","question":"","options":["①","②","③","④"],"answer":"③","explanation":""},
-{"id":23,"type":"vocabulary","word":"","question":"","options":["①","②","③","④"],"answer":"①","explanation":""},
-{"id":24,"type":"vocabulary","word":"","question":"","options":["①","②","③","④"],"answer":"④","explanation":""},
-{"id":25,"type":"vocabulary","word":"","question":"","options":["①","②","③","④"],"answer":"②","explanation":""}
+{"id":2,"type":"ox","question":"","answer":true,"explanation":""},
+{"id":3,"type":"ox","question":"","answer":false,"explanation":""},
+{"id":4,"type":"content","question":"","options":["①","②","③","④"],"answer":"③","explanation":""},
+{"id":5,"type":"content","question":"","options":["①","②","③","④"],"answer":"①","explanation":""},
+{"id":6,"type":"content","question":"","options":["①","②","③","④"],"answer":"④","explanation":""},
+{"id":7,"type":"fill_blank","question":"","options":["①","②","③","④"],"answer":"②","explanation":""},
+{"id":8,"type":"fill_blank","question":"","options":["①","②","③","④"],"answer":"④","explanation":""},
+{"id":9,"type":"fill_blank","question":"","options":["①","②","③","④"],"answer":"①","explanation":""},
+{"id":10,"type":"vocabulary","word":"","question":"","options":["①","②","③","④"],"answer":"③","explanation":""},
+{"id":11,"type":"vocabulary","word":"","question":"","options":["①","②","③","④"],"answer":"①","explanation":""},
+{"id":12,"type":"vocabulary","word":"","question":"","options":["①","②","③","④"],"answer":"④","explanation":""},
+{"id":13,"type":"vocabulary","word":"","question":"","options":["①","②","③","④"],"answer":"②","explanation":""},
+{"id":14,"type":"vocabulary","word":"","question":"","options":["①","②","③","④"],"answer":"③","explanation":""},
+{"id":15,"type":"vocabulary","word":"","question":"","options":["①","②","③","④"],"answer":"①","explanation":""}
 ]}
-Fill ALL fields with real story content. Make answers varied and realistic. book_found:false if unknown.`;
+Fill ALL fields with real varied story content. explanation: write only 1 short sentence. book_found:false if unknown.`;
 
 const TL={content:"📖 내용 이해",ox:"⭕ OX 퀴즈",vocabulary:"📝 단어 문제",fill_blank:"✏️ 빈칸 채우기"};
 const TB={content:"#FFF3E0",ox:"#E8F5E9",vocabulary:"#E3F2FD",fill_blank:"#FCE4EC"};
@@ -198,7 +188,7 @@ function set(p){
 }
 
 async function callAPI(imgData, retry=0, modelIdx=0){
-  const MODELS=["gemini-2.0-flash","gemini-1.5-flash","gemini-2.5-flash"];
+  const MODELS=["gemini-2.0-flash","gemini-2.5-flash","gemini-2.0-flash-lite"];
   const model=MODELS[modelIdx];
   const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${st.apiKey}`,{
     method:"POST",headers:{"Content-Type":"application/json"},
@@ -216,15 +206,12 @@ async function callAPI(imgData, retry=0, modelIdx=0){
     const code=d.error.code;
     const msg=d.error.message||"";
     if((code===429||code===503||msg.includes("quota")||msg.includes("high demand"))&&modelIdx<MODELS.length-1){
-      set({_retryMsg:`${model} → ${MODELS[modelIdx+1]} 전환 중...`});
       await new Promise(res=>setTimeout(res,2000));
       return callAPI(imgData,0,modelIdx+1);
     }
     if(retry<2){
       const wait=15+retry*15;
-      set({_retryMsg:`잠시 후 재시도... (${wait}초)`});
       await new Promise(res=>setTimeout(res,wait*1000));
-      set({_retryMsg:null});
       return callAPI(imgData,retry+1,modelIdx);
     }
     throw new Error(d.error.message);
@@ -256,7 +243,7 @@ function loadImg(file){
     const img=new Image();
     img.onload=()=>{
       const c=document.createElement("canvas");
-      const M=1024;let[w,h]=[img.width,img.height];
+      const M=600;let[w,h]=[img.width,img.height];
       if(w>M||h>M){if(w>h){h=Math.round(h*M/w);w=M;}else{w=Math.round(w*M/h);h=M;}}
       c.width=w;c.height=h;c.getContext("2d").drawImage(img,0,0,w,h);
       const u=c.toDataURL("image/jpeg",.85);
@@ -514,7 +501,7 @@ function draw(){
     <div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px">
       <div class="spin" style="font-size:64px">🔍</div>
       <p style="margin-top:20px;font-size:18px;font-weight:700;color:#4A148C">책을 읽고 있어요...</p>
-      <p style="margin-top:6px;font-size:14px;color:#7B1FA2">${st._retryMsg||"잠깐만 기다려주세요! ✨"}</p>
+      <p style="margin-top:6px;font-size:14px;color:#7B1FA2">잠깐만 기다려주세요! ✨</p>
       ${imgPrev?`<img src="${imgPrev}" style="width:120px;border-radius:12px;margin-top:16px;opacity:.7"/>`:""}
     </div>`;
     return;
@@ -542,7 +529,7 @@ function draw(){
       body=`<div style="border-radius:14px;padding:16px;background:${ok?"#E8F5E9":"#FFEBEE"};border:2px solid ${ok?"#4CAF50":"#EF5350"}">
         <p style="margin:0 0 8px;font-size:22px;font-weight:900;color:${ok?"#2E7D32":"#C62828"}">${ok?"🎉 정답이에요!":timedOut?"⏰ 시간 초과!":"😅 틀렸어요!"}</p>
         ${!ok?`<p style="margin:0 0 6px;font-size:14px;font-weight:700;color:#333">정답: <span style="color:#C62828">${q.type==="ox"?(q.answer?"O":"X"):q.answer}</span></p>`:""}
-        <p style="margin:0 0 14px;font-size:13px;color:#555;line-height:1.7">${q.explanation}</p>
+        ${!ok&&q.explanation?`<p style="margin:0 0 14px;font-size:13px;color:#555;line-height:1.7">${q.explanation}</p>`:`<p style="margin:0 0 14px"></p>`}
         ${isLast&&loadingMore
           ?`<button id="nxt" style="${btn("#888","white")}" disabled>⏳ 나머지 문제 로딩 중...</button>`
           :`<button id="nxt" style="${btn(ok?"#2E7D32":"#1565C0","white")}">${isLast?"🏆 결과 보기":"다음 문제 →"}</button>`
