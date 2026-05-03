@@ -189,8 +189,7 @@ let st={
   currentUser: null,
   imgData:null,imgPrev:null,
   bookInfo:null,questions:[],
-  idx:0,answers:{},firstAnswers:{},fill:"",shown:false,error:null,
-  _saved:false,_loadingMore:false,_timedOut:false,_retryMsg:null
+  idx:0,answers:{},firstAnswers:{},fill:"",shown:false,error:null
 };
 
 function set(p){
@@ -205,9 +204,9 @@ function set(p){
 }
 
 const MODELS=[
-  "gemini-2.5-flash-lite",
-  "gemini-2.5-flash",
   "gemini-2.0-flash",
+  "gemini-2.0-flash-lite",
+  "gemini-2.5-flash",
 ];
 
 async function geminiReq(parts, modelIdx=0, retry=0){
@@ -223,11 +222,15 @@ async function geminiReq(parts, modelIdx=0, retry=0){
   if(d.error){
     const code=d.error.code;
     const msg=d.error.message||"";
-    // 쿼터 초과 → 다음 모델로
-    if((code===429||code===503||msg.includes("high demand"))&&modelIdx<MODELS.length-1){
-      set({_retryMsg:`${model} 혼잡 → ${MODELS[modelIdx+1]} 시도 중...`});
-      await new Promise(res=>setTimeout(res,2000));
+    // 모델 없음(404) or 쿼터 초과(429/503) → 다음 모델로
+    if((code===404||code===429||code===503||msg.includes("high demand")||msg.includes("not found"))&&modelIdx<MODELS.length-1){
+      set({_retryMsg:`${model} 사용 불가 → ${MODELS[modelIdx+1]} 시도 중...`});
+      await new Promise(res=>setTimeout(res,1000));
       return geminiReq(parts, modelIdx+1, 0);
+    }
+    // 인증 오류
+    if(code===400||code===401||code===403){
+      throw new Error("API 키 오류입니다. aistudio.google.com에서 새 키를 발급해주세요.");
     }
     // 재시도
     if(retry<2){
@@ -237,7 +240,7 @@ async function geminiReq(parts, modelIdx=0, retry=0){
       set({_retryMsg:null});
       return geminiReq(parts, modelIdx, retry+1);
     }
-    throw new Error(d.error.message);
+    throw new Error(msg||"알 수 없는 오류가 발생했어요.");
   }
   const raw=d.candidates?.[0]?.content?.parts?.[0]?.text||"";
   const clean=raw.replace(/```json|```/g,"").trim();
@@ -683,7 +686,7 @@ function draw(){
       ts:Date.now(),
       date:new Date().toLocaleDateString("ko-KR",{month:"long",day:"numeric"})
     };
-    if(!st._saved){saveRecord(st.currentUser||"user",rec);set({_saved:true});}
+    if(!st._saved){saveRecord(st.currentUser||"user",rec);st._saved=true;}
     clearProgress(st.currentUser||"user");
 
     app.innerHTML=`
@@ -784,10 +787,10 @@ function draw(){
         <div style="background:white;border-radius:14px;padding:14px 16px;margin-bottom:14px;box-shadow:0 2px 10px rgba(0,0,0,.07)">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
             <span style="font-size:13px;font-weight:700;color:#555">단어 점수</span>
-            <span style="font-size:16px;font-weight:900;color:#1565C0">${vocabQs.length?Math.round(vocabScore/vocabQs.length*100):0}%</span>
+            <span style="font-size:16px;font-weight:900;color:#1565C0">${Math.round(vocabScore/vocabQs.length*100)}%</span>
           </div>
           <div style="height:8px;border-radius:99px;background:#E3F2FD;overflow:hidden">
-            <div style="height:100%;border-radius:99px;background:linear-gradient(90deg,#1565C0,#00ACC1);width:${vocabQs.length?Math.round(vocabScore/vocabQs.length*100):0}%;transition:width 1s"></div>
+            <div style="height:100%;border-radius:99px;background:linear-gradient(90deg,#1565C0,#00ACC1);width:${Math.round(vocabScore/vocabQs.length*100)}%;transition:width 1s"></div>
           </div>
         </div>
 
@@ -830,6 +833,15 @@ function draw(){
           `</div>`;
       }
     }else{
+      const goRetryNext=()=>{
+        if(ridx+1>=rqs.length){
+          // 재도전 완료 → answers에 반영 후 result로
+          const merged={...st.answers,...st.retryAnswers};
+          set({answers:merged,phase:"result",shown:false,retryQs:null,retryIdx:0,retryAnswers:{}});
+        } else {
+          set({retryIdx:ridx+1,shown:false});
+        }
+      };
       rbody=`<div style="border-radius:14px;padding:16px;background:${rok?"#E8F5E9":"#FFEBEE"};border:2px solid ${rok?"#4CAF50":"#EF5350"}">
         <p style="margin:0 0 8px;font-size:22px;font-weight:900;color:${rok?"#2E7D32":"#C62828"}">${rok?"🎉 이번엔 맞았어요!":"😅 아직 어렵네요!"}</p>
         ${!rok?`<p style="margin:0 0 6px;font-size:14px;font-weight:700;color:#333">정답: <span style="color:#C62828">${rq.type==="ox"?(rq.answer?"O":"X"):rq.answer}</span></p>`:""}
@@ -1008,7 +1020,7 @@ function draw(){
         }).join("");
 
     const total_books=recs.length;
-    const avg=recs.length?Math.round(recs.reduce((a,r)=>a+(r.pct||0),0)/recs.length):0;
+    const avg=recs.length?Math.round(recs.reduce((a,r)=>a+r.pct,0)/recs.length):0;
     const passed_books=recs.filter(r=>r.passed).length;
 
     app.innerHTML=`
