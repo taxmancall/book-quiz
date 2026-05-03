@@ -26,7 +26,7 @@ Step 1: Identify the book from the cover image.
 Step 2: Generate exactly 10 quiz questions using YOUR KNOWLEDGE of the story.
 Language rule: Korean book→Korean questions, English book→English questions.
 Return JSON only, no markdown, no extra text.
-{"book_title":"","author":"","language":"ko","book_found":true,"questions":[
+{"book_title":"","author":"","language":"ko","book_found":true,"reading_level":2.0,"questions":[
 {"id":1,"type":"ox","question":"","answer":true,"explanation":""},
 {"id":2,"type":"ox","question":"","answer":false,"explanation":""},
 {"id":3,"type":"ox","question":"","answer":true,"explanation":""},
@@ -38,7 +38,7 @@ Return JSON only, no markdown, no extra text.
 {"id":9,"type":"content","question":"","options":["①","②","③","④"],"answer":"④","explanation":""},
 {"id":10,"type":"content","question":"","options":["①","②","③","④"],"answer":"①","explanation":""}
 ]}
-Fill ALL 10 questions with real story content. book_found:false if unknown.`;
+Fill ALL 10 questions with real story content. book_found:false if unknown. reading_level: AR level as decimal (e.g. 1.5, 2.8, 3.4).`;
 
 // 2단계: 빈칸5 + 단어10 = 15문제 (백그라운드)
 const PROMPT2=(title,lang)=>`Generate exactly 15 quiz questions about "${title}" for 2nd graders.
@@ -69,8 +69,8 @@ const KS="bq_gkey";
 const RS="bq_records";
 
 const USERS=[
-  {name:"에스더", emoji:"🌸", color:"#E91E63"},
-  {name:"노아",   emoji:"⚡", color:"#1565C0"}
+  {name:"에스더", emoji:"🌸", color:"#E91E63", age:9, minLevel:2.5},
+  {name:"노아",   emoji:"⚡", color:"#1565C0", age:7, minLevel:1.5}
 ];
 
 function getRecords(user){try{return JSON.parse(localStorage.getItem(RS+"_"+user)||"[]");}catch{return[];}}
@@ -113,8 +113,13 @@ function calcPoints(user){
 
   // 주별 그룹핑
   const weeks={};
+  // 해당 유저의 최소 레벨 기준
+  const userInfo=USERS.find(u=>u.name===user);
+  const minLv=userInfo?userInfo.minLevel:0;
+
   withTs.forEach(r=>{
     if(!r.passed) return;
+    if(r.level&&r.level<minLv) return; // 쉬운 책 제외
     const wk=getWeekStart(r.ts);
     if(!weeks[wk]) weeks[wk]={count:0,pts:0,books:[]};
     weeks[wk].count++;
@@ -126,6 +131,7 @@ function calcPoints(user){
   const months={};
   withTs.forEach(r=>{
     if(!r.passed) return;
+    if(r.level&&r.level<minLv) return; // 쉬운 책 제외
     const mk=getMonthKey(r.ts);
     if(!months[mk]) months[mk]={count:0,pts:0};
     months[mk].count++;
@@ -264,7 +270,7 @@ async function callGemini(){
     if(!p1.book_found){set({phase:"upload",error:"책을 인식하지 못했어요. 표지가 잘 보이게 다시 찍어주세요! 📸"});return;}
     if(!p1.questions||p1.questions.length===0){set({phase:"upload",error:"문제 생성에 실패했어요. 다시 시도해주세요."});return;}
 
-    const bookInfo={title:p1.book_title,author:p1.author,lang:p1.language||"ko"};
+    const bookInfo={title:p1.book_title,author:p1.author,lang:p1.language||"ko",level:p1.reading_level||null};
     // 10문제로 바로 퀴즈 시작
     set({bookInfo,questions:p1.questions,idx:0,answers:{},firstAnswers:{},phase:"quiz",_loadingMore:true});
 
@@ -355,20 +361,25 @@ function startTimer(){
   },1000);
 }
 
+function extractNum(s){
+  // "① horizon" → "①", "①" → "①"
+  if(!s) return s;
+  const m=s.match(/^([①②③④])/);
+  return m?m[1]:s;
+}
+
 function isOk(q){
-  // 점수는 첫 번째 시도 기준
   const a=(st.firstAnswers||{})[q.id];
   if(!a||a==="__timeout__") return false;
   if(q.type==="ox") return(a==="O")===q.answer;
-  return a===q.answer;
+  return extractNum(a)===extractNum(q.answer);
 }
 
 function isOkCurrent(q){
-  // 현재 답 기준 (재도전 후 맞았는지 표시용)
   const a=st.answers[q.id];
   if(!a||a==="__timeout__") return false;
   if(q.type==="ox") return(a==="O")===q.answer;
-  return a===q.answer;
+  return extractNum(a)===extractNum(q.answer);
 }
 
 function saveKey(){
@@ -380,6 +391,16 @@ function saveKey(){
 
 const btn=(bg,c="white",ex="")=>`width:100%;padding:14px 0;border-radius:13px;border:none;background:${bg};color:${c};font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;${ex}`;
 const err=()=>st.error?`<div style="background:#FFEBEE;border:2px solid #EF9A9A;border-radius:12px;padding:12px 16px;margin-bottom:14px;color:#C62828;font-size:14px;text-align:center">${st.error}</div>`:"";
+
+function getLevelBadge(level, userName){
+  if(!level) return "";
+  const u=USERS.find(u=>u.name===userName);
+  if(!u) return "";
+  if(level < u.minLevel){
+    return `<span style="font-size:10px;background:#FFF9C4;color:#F57F17;border:1px solid #FFE082;padding:2px 7px;border-radius:99px;font-weight:700;white-space:nowrap">📗 쉬운 책 (AR${level})</span>`;
+  }
+  return `<span style="font-size:10px;background:#E8F5E9;color:#2E7D32;border:1px solid #A5D6A7;padding:2px 7px;border-radius:99px;font-weight:700;white-space:nowrap">✅ AR${level}</span>`;
+}
 
 function draw(){
   const {phase,apiKey,imgPrev,bookInfo,questions,idx,shown,fill,error}=st;
@@ -418,7 +439,8 @@ function draw(){
           <p style="margin-top:6px;font-size:15px;color:#7B1FA2">누가 풀건가요?</p>
         </div>
         ${userCards}
-        <div style="text-align:center;margin-top:20px">
+        <button id="gobattle" style="width:100%;padding:14px 0;border-radius:16px;border:none;background:linear-gradient(135deg,#FF6F00,#E91E63);color:white;font-size:15px;font-weight:900;cursor:pointer;font-family:inherit;margin-bottom:10px;box-shadow:0 4px 16px rgba(233,30,99,.3)">⚔️ 대결 현황 보기</button>
+        <div style="text-align:center;margin-top:4px">
           <button id="chkey2" style="background:none;border:none;color:#ccc;font-size:12px;cursor:pointer;font-family:inherit">API 키 변경</button>
         </div>
       </div>
@@ -456,10 +478,132 @@ function draw(){
       });
     });
     document.getElementById("chkey2").addEventListener("click",()=>{localStorage.removeItem(KS);set({apiKey:"",phase:"setup"});});
+    document.getElementById("battle").addEventListener("click",()=>set({phase:"battle"}));
+    document.getElementById("gobattle").addEventListener("click",()=>set({phase:"battle"}));
     return;
   }
 
   /* ── ADD USER ── (제거됨) */
+
+  /* ── BATTLE ── */
+  if(phase==="battle"){
+    const u0=USERS[0], u1=USERS[1];
+    const r0=getRecords(u0.name), r1=getRecords(u1.name);
+    const p0=calcPoints(u0.name), p1=calcPoints(u1.name);
+
+    // 이번주 통과 권수
+    const w0=p0.thisWeek.count, w1=p1.thisWeek.count;
+    // 이번달 통과 권수
+    const m0=p0.thisMonth.count, m1=p1.thisMonth.count;
+    // 전체 평균
+    const avg0=r0.length?Math.round(r0.reduce((a,r)=>a+(r.pct||0),0)/r0.length):0;
+    const avg1=r1.length?Math.round(r1.reduce((a,r)=>a+(r.pct||0),0)/r1.length):0;
+    // 통과 권수
+    const pass0=r0.filter(r=>r.passed).length, pass1=r1.filter(r=>r.passed).length;
+
+    const winColor="#2E7D32", loseColor="#C62828", tieColor="#888";
+    const statRow=(label,v0,v1,higher=true)=>{
+      const win=higher?(v0>v1?0:v0<v1?1:-1):(v0<v1?0:v0>v1?1:-1);
+      const c0=win===0?winColor:win===1?loseColor:tieColor;
+      const c1=win===1?winColor:win===0?loseColor:tieColor;
+      const maxV=Math.max(v0,v1,1);
+      return `<div style="margin-bottom:16px">
+        <p style="text-align:center;font-size:12px;color:#888;font-weight:600;margin:0 0 8px">${label}</p>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:16px;font-weight:900;color:${c0};min-width:36px;text-align:right">${v0}</span>
+          <div style="flex:1;position:relative;height:20px">
+            <div style="position:absolute;right:50%;top:0;height:100%;border-radius:99px 0 0 99px;background:${c0};opacity:.85;width:${Math.round(v0/maxV*50)}%"></div>
+            <div style="position:absolute;left:50%;top:0;height:100%;border-radius:0 99px 99px 0;background:${c1};opacity:.85;width:${Math.round(v1/maxV*50)}%"></div>
+            <div style="position:absolute;left:50%;top:0;width:2px;height:100%;background:#DDD;transform:translateX(-50%)"></div>
+          </div>
+          <span style="font-size:16px;font-weight:900;color:${c1};min-width:36px">${v1}</span>
+        </div>
+      </div>`;
+    };
+
+    // 최근 5권 기록
+    const recentRows=(recs,color,uName)=>recs.slice(0,5).map(r=>{
+      const bar=r.pct||0;
+      const col=bar>=80?"#2E7D32":bar>=60?"#F57F17":"#C62828";
+      return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #F5F5F5">
+        ${r.thumb?`<img src="${r.thumb}" style="width:28px;height:36px;object-fit:cover;border-radius:4px;flex-shrink:0"/>`:`<div style="width:28px;height:36px;background:#EEE;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">📖</div>`}
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">
+          <p style="margin:0;font-size:12px;font-weight:700;color:#333;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:80px">${r.title}</p>
+          ${r.level&&r.level<(USERS.find(u=>u.name===uName)?.minLevel||0)?`<span style="font-size:9px;background:#FFF9C4;color:#F57F17;border-radius:99px;padding:1px 5px;font-weight:700;white-space:nowrap">📗쉬움·미적용</span>`:""}
+          </div>
+          <p style="margin:0;font-size:10px;color:#AAA">${r.date}</p>
+        </div>
+        <span style="font-size:12px;font-weight:900;color:${col};white-space:nowrap">${bar}%</span>
+      </div>`;
+    }).join("")||`<p style="color:#CCC;font-size:12px;text-align:center;padding:8px 0">기록 없음</p>`;
+
+    // 총점 승자
+    const ptWin=p0.total>p1.total?0:p0.total<p1.total?1:-1;
+
+    app.innerHTML=`
+    <div style="min-height:100vh;padding:20px 16px;background:linear-gradient(135deg,#FFFBF0,#FFF8E1 50%,#F3E5F5)">
+      <div style="max-width:440px;margin:0 auto">
+
+        <!-- 헤더 -->
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+          <button id="back" style="background:none;border:none;font-size:22px;cursor:pointer">←</button>
+          <h1 style="flex:1;font-size:20px;font-weight:900;color:#4A148C;text-align:center">⚔️ 독서 대결</h1>
+          <div style="width:30px"></div>
+        </div>
+
+        <!-- 대결 헤더 카드 -->
+        <div style="background:white;border-radius:20px;padding:20px;margin-bottom:14px;box-shadow:0 4px 16px rgba(0,0,0,.08)">
+          <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center;text-align:center">
+            <div>
+              <div style="font-size:36px">${u0.emoji}</div>
+              <p style="margin:4px 0 2px;font-size:18px;font-weight:900;color:${u0.color}">${u0.name}</p>
+              <p style="margin:0;font-size:24px;font-weight:900;color:${ptWin===0?"#F57F17":ptWin===1?"#AAA":"#888"}">${p0.total}<span style="font-size:13px">점</span></p>
+              ${ptWin===0?`<span style="font-size:11px;background:#FFF9C4;color:#F57F17;padding:2px 8px;border-radius:99px;font-weight:700">👑 앞서는 중</span>`:""}
+            </div>
+            <div style="font-size:24px;font-weight:900;color:#DDD">VS</div>
+            <div>
+              <div style="font-size:36px">${u1.emoji}</div>
+              <p style="margin:4px 0 2px;font-size:18px;font-weight:900;color:${u1.color}">${u1.name}</p>
+              <p style="margin:0;font-size:24px;font-weight:900;color:${ptWin===1?"#F57F17":ptWin===0?"#AAA":"#888"}">${p1.total}<span style="font-size:13px">점</span></p>
+              ${ptWin===1?`<span style="font-size:11px;background:#FFF9C4;color:#F57F17;padding:2px 8px;border-radius:99px;font-weight:700">👑 앞서는 중</span>`:""}
+            </div>
+          </div>
+        </div>
+
+        <!-- 통계 비교 -->
+        <div style="background:white;border-radius:20px;padding:20px;margin-bottom:14px;box-shadow:0 4px 16px rgba(0,0,0,.08)">
+          <div style="display:grid;grid-template-columns:1fr 1fr;margin-bottom:16px">
+            <p style="margin:0;font-size:13px;font-weight:900;color:${u0.color};text-align:center">${u0.emoji} ${u0.name}</p>
+            <p style="margin:0;font-size:13px;font-weight:900;color:${u1.color};text-align:center">${u1.emoji} ${u1.name}</p>
+          </div>
+          ${statRow("📚 읽은 책 (전체)",r0.length,r1.length)}
+          ${statRow("✅ 통과한 책",pass0,pass1)}
+          ${statRow("📊 평균 점수",avg0,avg1)}
+          ${statRow("📅 이번 주 통과",w0,w1)}
+          ${statRow("📆 이번 달 통과",m0,m1)}
+          ${statRow("⭐ 총 포인트",p0.total,p1.total)}
+        </div>
+
+        <!-- 최근 기록 나란히 -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+          <div style="background:white;border-radius:16px;padding:14px;box-shadow:0 2px 10px rgba(0,0,0,.07)">
+            <p style="margin:0 0 10px;font-size:13px;font-weight:900;color:${u0.color}">${u0.emoji} 최근 기록</p>
+            ${recentRows(r0,u0.color,u0.name)}
+          </div>
+          <div style="background:white;border-radius:16px;padding:14px;box-shadow:0 2px 10px rgba(0,0,0,.07)">
+            <p style="margin:0 0 10px;font-size:13px;font-weight:900;color:${u1.color}">${u1.emoji} 최근 기록</p>
+            ${recentRows(r1,u1.color,u1.name)}
+          </div>
+        </div>
+
+        <button id="back2" style="width:100%;padding:14px 0;border-radius:13px;border:none;background:white;color:#7B1FA2;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;border:2px solid #CE93D8">← 돌아가기</button>
+      </div>
+    </div>`;
+    document.getElementById("back").addEventListener("click",()=>set({phase:"select"}));
+    document.getElementById("back2").addEventListener("click",()=>set({phase:"select"}));
+    return;
+  }
 
   /* ── SETUP ── */
   if(phase==="setup"||!apiKey){
@@ -684,7 +828,7 @@ function draw(){
     // 자동 저장
     const rec={
       title:bookInfo?.title||"",author:bookInfo?.author||"",
-      lang:bookInfo?.lang||"ko",score:s,total:questions.length,pct,passed,
+      lang:bookInfo?.lang||"ko",level:bookInfo?.level||null,score:s,total:questions.length,pct,passed,
       thumb:st.imgPrev||null,
       ts:Date.now(),
       date:new Date().toLocaleDateString("ko-KR",{month:"long",day:"numeric"}),
@@ -703,15 +847,29 @@ function draw(){
           <div style="font-size:56px;margin-bottom:8px">${em}</div>
           <p style="margin:0 0 4px;font-size:28px;font-weight:900;color:white">${passed?"✅ 통과!":"❌ 미통과"}</p>
           <p style="margin:0;font-size:15px;color:${passed?"#A5D6A7":"#FFCDD2"};font-weight:600">${mg}</p>
-          ${passed?`<div style="margin-top:12px;background:rgba(255,255,255,.2);border-radius:12px;padding:10px 16px;display:inline-block">
-            <p style="margin:0;color:white;font-size:18px;font-weight:900">+${calcBookPoints(pct)}점 획득! ⭐</p>
-            <p style="margin:2px 0 0;color:rgba(255,255,255,.8);font-size:12px">이번 주 ${(()=>{const p=calcPoints(st.currentUser||"");return p.thisWeek.count;})()}/${WEEKLY_MIN}권 달성${(()=>{const p=calcPoints(st.currentUser||"");return p.thisWeek.count>=WEEKLY_MIN?" 🎉 주간 확정!":"";})()} </p>
-          </div>`:""}
+          ${passed?(()=>{
+            const userInfo=USERS.find(u=>u.name===st.currentUser);
+            const isEasy=bookInfo?.level&&userInfo&&bookInfo.level<userInfo.minLevel;
+            if(isEasy){
+              return `<div style="margin-top:12px;background:rgba(255,255,255,.15);border-radius:12px;padding:10px 16px;display:inline-block">
+                <p style="margin:0;color:rgba(255,255,255,.7);font-size:14px;font-weight:700">📗 쉬운 책 (AR${bookInfo.level})</p>
+                <p style="margin:4px 0 0;color:rgba(255,255,255,.6);font-size:12px">포인트 미적용 · AR${userInfo.minLevel} 이상 책을 읽어요!</p>
+              </div>`;
+            }
+            const p=calcPoints(st.currentUser||"");
+            return `<div style="margin-top:12px;background:rgba(255,255,255,.2);border-radius:12px;padding:10px 16px;display:inline-block">
+              <p style="margin:0;color:white;font-size:18px;font-weight:900">+${calcBookPoints(pct)}점 획득! ⭐</p>
+              <p style="margin:2px 0 0;color:rgba(255,255,255,.8);font-size:12px">이번 주 ${p.thisWeek.count}/${WEEKLY_MIN}권 달성${p.thisWeek.count>=WEEKLY_MIN?" 🎉 주간 확정!":""} </p>
+            </div>`;
+          })():""}
         </div>
 
         <!-- 점수 카드 -->
         <div style="background:white;border-radius:20px;padding:20px 24px;box-shadow:0 4px 20px rgba(0,0,0,.08);margin-bottom:12px">
-          <p style="margin:0 0 4px;font-size:13px;color:#9C27B0;font-weight:600">📖 ${bookInfo?.title||""}</p>
+          <div style="display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">
+          <p style="margin:0;font-size:13px;color:#9C27B0;font-weight:600">📖 ${bookInfo?.title||""}</p>
+          ${getLevelBadge(bookInfo?.level||null,st.currentUser||"")}
+          </div>
           <h2 style="margin:8px 0 4px;font-size:32px;font-weight:900;color:${passed?"#2E7D32":"#C62828"}">${pct}%</h2>
           <p style="margin:0 0 12px;font-size:13px;color:#888">${s}개 정답 / ${questions.length}개 문제 · 통과기준 80%</p>
           <div style="height:12px;border-radius:99px;background:#EEE;overflow:hidden;margin-bottom:6px;position:relative">
@@ -1002,6 +1160,128 @@ function draw(){
     return;
   }
 
+  /* ── BATTLE ── */
+  if(phase==="battle"){
+    const u0=USERS[0], u1=USERS[1];
+    const r0=getRecords(u0.name), r1=getRecords(u1.name);
+    const pts0=calcPoints(u0.name), pts1=calcPoints(u1.name);
+
+    // 통계
+    const stat=(recs)=>({
+      total:recs.length,
+      passed:recs.filter(r=>r.passed).length,
+      avg:recs.length?Math.round(recs.reduce((a,r)=>a+(r.pct||0),0)/recs.length):0,
+      streak:(()=>{let s=0;for(const r of recs){if(r.passed)s++;else break;}return s;})(),
+      thisWeek:(()=>{const wk=getWeekStart();return recs.filter(r=>(r.ts||0)>=wk&&r.passed).length;})()
+    });
+    const s0=stat(r0), s1=stat(r1);
+
+    // 각 항목 승자
+    const win=(a,b)=>a>b?"left":a<b?"right":"tie";
+    const items=[
+      {label:"⭐ 포인트",v0:pts0.total,v1:pts1.total,unit:"점"},
+      {label:"📚 읽은 책",v0:s0.total,v1:s1.total,unit:"권"},
+      {label:"✅ 통과",v0:s0.passed,v1:s1.passed,unit:"권"},
+      {label:"📊 평균 점수",v0:s0.avg,v1:s1.avg,unit:"%"},
+      {label:"🔥 연속 통과",v0:s0.streak,v1:s1.streak,unit:"권"},
+      {label:"📅 이번 주",v0:s0.thisWeek,v1:s1.thisWeek,unit:"권"},
+    ];
+
+    const totalWins0=items.filter(it=>win(it.v0,it.v1)==="left").length;
+    const totalWins1=items.filter(it=>win(it.v0,it.v1)==="right").length;
+    const overallWinner=totalWins0>totalWins1?"left":totalWins0<totalWins1?"right":"tie";
+
+    const rows=items.map(it=>{
+      const w=win(it.v0,it.v1);
+      const hl0=w==="left"?"background:#FFF9C4;border-radius:8px;":"";
+      const hl1=w==="right"?"background:#FFF9C4;border-radius:8px;":"";
+      return `<div style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid #F5F5F5">
+        <div style="text-align:right;padding:6px 8px;${hl0}">
+          <span style="font-size:${w==="left"?"20px":"16px"};font-weight:900;color:${w==="left"?u0.color:"#AAA"}">${it.v0}${it.unit}</span>
+          ${w==="left"?`<span style="font-size:14px;margin-left:4px">🏆</span>`:""}
+        </div>
+        <div style="text-align:center;font-size:11px;color:#888;font-weight:700;white-space:nowrap">${it.label}</div>
+        <div style="text-align:left;padding:6px 8px;${hl1}">
+          ${w==="right"?`<span style="font-size:14px;margin-right:4px">🏆</span>`:""}
+          <span style="font-size:${w==="right"?"20px":"16px"};font-weight:900;color:${w==="right"?u1.color:"#AAA"}">${it.v1}${it.unit}</span>
+        </div>
+      </div>`;
+    }).join("");
+
+    // 최근 책 비교 (각각 최대 5권)
+    const recentBooks=(recs,color)=>recs.slice(0,5).map(r=>`
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+        ${r.thumb?`<img src="${r.thumb}" style="width:28px;height:36px;object-fit:cover;border-radius:4px;flex-shrink:0"/>`:`<div style="width:28px;height:36px;background:#EEE;border-radius:4px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px">📖</div>`}
+        <div style="min-width:0">
+          <p style="margin:0;font-size:11px;font-weight:700;color:#333;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:110px">${r.title}</p>
+          <span style="font-size:10px;font-weight:700;color:${r.passed?"#2E7D32":"#C62828"}">${r.passed?"✅":"❌"} ${r.pct}%</span>
+        </div>
+      </div>`).join("");
+
+    app.innerHTML=`
+    <div style="min-height:100vh;padding:20px 16px;background:linear-gradient(135deg,#FFFBF0,#FFF8E1 50%,#F3E5F5)">
+      <div style="max-width:440px;margin:0 auto">
+
+        <!-- 헤더 -->
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+          <button id="back" style="background:none;border:none;font-size:22px;cursor:pointer">←</button>
+          <h1 style="font-size:20px;font-weight:900;flex:1;background:linear-gradient(135deg,#FF6F00,#E91E63);-webkit-background-clip:text;-webkit-text-fill-color:transparent">⚔️ 독서 대결</h1>
+        </div>
+
+        <!-- 대결 배너 -->
+        <div style="background:linear-gradient(135deg,#1A237E,#4A148C);border-radius:20px;padding:20px;margin-bottom:16px;text-align:center">
+          <div style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:12px">
+            <div>
+              <div style="font-size:36px">${u0.emoji}</div>
+              <p style="margin:4px 0 0;color:white;font-weight:900;font-size:16px">${u0.name}</p>
+              <p style="margin:2px 0 0;color:rgba(255,255,255,.7);font-size:12px">${totalWins0}승</p>
+            </div>
+            <div style="color:white;font-size:22px;font-weight:900">VS</div>
+            <div>
+              <div style="font-size:36px">${u1.emoji}</div>
+              <p style="margin:4px 0 0;color:white;font-weight:900;font-size:16px">${u1.name}</p>
+              <p style="margin:2px 0 0;color:rgba(255,255,255,.7);font-size:12px">${totalWins1}승</p>
+            </div>
+          </div>
+          ${overallWinner!=="tie"
+            ?`<div style="margin-top:14px;background:rgba(255,255,255,.15);border-radius:12px;padding:8px 16px">
+                <p style="margin:0;color:#FFD700;font-weight:900;font-size:14px">🏆 현재 ${overallWinner==="left"?u0.name:u1.name} 리드!</p>
+              </div>`
+            :`<div style="margin-top:14px;background:rgba(255,255,255,.15);border-radius:12px;padding:8px 16px">
+                <p style="margin:0;color:#FFD700;font-weight:900;font-size:14px">🤝 현재 동점!</p>
+              </div>`}
+        </div>
+
+        <!-- 항목별 대결 -->
+        <div style="background:white;border-radius:16px;padding:16px;box-shadow:0 2px 10px rgba(0,0,0,.07);margin-bottom:14px">
+          <div style="display:grid;grid-template-columns:1fr auto 1fr;margin-bottom:10px">
+            <p style="margin:0;font-size:13px;font-weight:900;color:${u0.color};text-align:right">${u0.emoji} ${u0.name}</p>
+            <div></div>
+            <p style="margin:0;font-size:13px;font-weight:900;color:${u1.color};text-align:left">${u1.emoji} ${u1.name}</p>
+          </div>
+          ${rows}
+        </div>
+
+        <!-- 최근 독서 비교 -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+          <div style="background:white;border-radius:16px;padding:14px;box-shadow:0 2px 10px rgba(0,0,0,.07)">
+            <p style="margin:0 0 10px;font-size:13px;font-weight:900;color:${u0.color}">${u0.emoji} ${u0.name} 최근</p>
+            ${r0.length?recentBooks(r0,u0.color):`<p style="color:#CCC;font-size:12px">아직 없어요</p>`}
+          </div>
+          <div style="background:white;border-radius:16px;padding:14px;box-shadow:0 2px 10px rgba(0,0,0,.07)">
+            <p style="margin:0 0 10px;font-size:13px;font-weight:900;color:${u1.color}">${u1.emoji} ${u1.name} 최근</p>
+            ${r1.length?recentBooks(r1,u1.color):`<p style="color:#CCC;font-size:12px">아직 없어요</p>`}
+          </div>
+        </div>
+
+        <button id="back2" style="${btn("linear-gradient(135deg,#7B1FA2,#E91E63)","white","padding:14px 0;font-size:15px;font-weight:900")}">← 돌아가기</button>
+      </div>
+    </div>`;
+    document.getElementById("back").addEventListener("click",()=>set({phase:"select"}));
+    document.getElementById("back2").addEventListener("click",()=>set({phase:"select"}));
+    return;
+  }
+
   /* ── RECORDS ── */
   if(phase==="records"){
     const recs=getRecords(st.currentUser||"user");
@@ -1027,7 +1307,7 @@ function draw(){
                   <p style="margin:0;font-weight:900;font-size:14px;color:#1A237E;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px">${r.title}</p>
                   <span style="font-size:11px;font-weight:700;padding:2px 7px;border-radius:99px;white-space:nowrap;background:${r.passed?"#E8F5E9":"#FFEBEE"};color:${r.passed?"#2E7D32":"#C62828"}">${r.passed?"✅ 통과":"❌ 미통과"}</span>
                 </div>
-                <p style="margin:0 0 6px;font-size:11px;color:#888">${r.date} · ${r.lang==="en"?"🇺🇸 English":"🇰🇷 국어"}</p>
+                <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:6px"><p style="margin:0;font-size:11px;color:#888">${r.date} · ${r.lang==="en"?"🇺🇸 English":"🇰🇷 국어"}</p>${getLevelBadge(r.level,st.currentUser||"")}</div>
                 <div style="display:flex;align-items:center;gap:8px">
                   <div style="flex:1;height:6px;border-radius:99px;background:#EEE;overflow:hidden">
                     <div style="height:100%;border-radius:99px;background:${col};width:${bar}%"></div>
