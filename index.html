@@ -4,6 +4,7 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
   <title>📚 책 읽기 퀴즈</title>
+  <!-- v1.1: 재도전/기록 채점 버그 수정 (extractNum 비교) -->
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700;900&display=swap" rel="stylesheet"/>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
@@ -366,6 +367,12 @@ function extractNum(s){
   if(!s) return s;
   const m=s.match(/^([①②③④])/);
   return m?m[1]:s;
+}
+
+function checkAns(q,a){
+  if(!a||a==="__timeout__") return false;
+  if(q.type==="ox") return (a==="O")===q.answer;
+  return extractNum(a)===extractNum(q.answer);
 }
 
 function isOk(q){
@@ -980,7 +987,7 @@ function draw(){
 
     const ra=st.retryAnswers?.[rq.id];
     const rshown=st.shown;
-    const rok=ra?(rq.type==="ox"?(ra==="O")===rq.answer:ra===rq.answer):false;
+    const rok=checkAns(rq,ra);
     const rpct=Math.round(((ridx+1)/rqs.length)*100);
 
     let rbody="";
@@ -1294,10 +1301,7 @@ function draw(){
           const bar=Math.round((r.score/r.total)*100);
           const col=bar>=90?"#2E7D32":bar>=70?"#F57F17":bar>=50?"#1565C0":"#C62828";
           const wrongCount=r.questions?(r.questions.filter(q=>{
-            const a=(r.firstAnswers||{})[q.id];
-            if(!a||a==="__timeout__") return true;
-            if(q.type==="ox") return (a==="O")!==q.answer;
-            return a!==q.answer;
+            return !checkAns(q,(r.firstAnswers||{})[q.id]);
           }).length):0;
           return `<div style="background:white;border-radius:16px;padding:14px 16px;margin-bottom:10px;box-shadow:0 2px 10px rgba(0,0,0,.07)">
             <div style="display:flex;gap:12px;align-items:center">
@@ -1364,10 +1368,7 @@ function draw(){
       const r=recs[parseInt(b.dataset.retry)];
       if(!r||!r.questions||r.questions.length===0){alert("이 기록은 문제 데이터가 없어요. 새로 풀어주세요.");return;}
       const wrongQs=r.questions.filter(q=>{
-        const a=(r.firstAnswers||{})[q.id];
-        if(!a||a==="__timeout__") return true;
-        if(q.type==="ox") return (a==="O")!==q.answer;
-        return a!==q.answer;
+        return !checkAns(q,(r.firstAnswers||{})[q.id]);
       });
       if(wrongQs.length===0){alert("틀린 문제가 없어요! 🎉");return;}
       // 오답 재풀기 모드로 진입 (최초 점수는 건드리지 않음)
