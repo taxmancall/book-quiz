@@ -4,7 +4,7 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
   <title>📚 책 읽기 퀴즈</title>
-  <!-- v1.4: AI 과부하 시 모델 순환 재시도, v1.3: 어려움 난이도 강화, v1.2: 난이도 선택(쉬움/보통/어려움) 추가, v1.1: 재도전/기록 채점 버그 수정 -->
+  <!-- v1.5: JSON 형식 오류 자동 재시도, v1.4: AI 과부하 시 모델 순환 재시도, v1.3: 어려움 난이도 강화, v1.2: 난이도 선택(쉬움/보통/어려움) 추가, v1.1: 재도전/기록 채점 버그 수정 -->
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700;900&display=swap" rel="stylesheet"/>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
@@ -36,7 +36,7 @@ Step 1: Identify the book from the cover image.
 Step 2: Generate exactly 10 quiz questions using YOUR KNOWLEDGE of the story.
 Language rule: Korean book→Korean questions, English book→English questions.
 ${diffRule()}
-Return JSON only, no markdown, no extra text.
+Return JSON only, no markdown, no extra text. Never use double quote characters (\") inside string values; use single quotes instead.
 {"book_title":"","author":"","language":"ko","book_found":true,"reading_level":2.0,"questions":[
 {"id":1,"type":"ox","question":"","answer":true,"explanation":""},
 {"id":2,"type":"ox","question":"","answer":false,"explanation":""},
@@ -53,7 +53,7 @@ Fill ALL 10 questions with real story content. book_found:false if unknown. read
 
 // 2단계: 빈칸5 + 단어10 = 15문제 (백그라운드)
 const PROMPT2=(title,lang)=>`Generate exactly 15 quiz questions about "${title}" for 2nd graders.
-Language: ${lang==="en"?"English":"Korean"}. Use real story content. JSON only, no extra text.
+Language: ${lang==="en"?"English":"Korean"}. Use real story content. JSON only, no extra text. Never use double quote characters inside string values; use single quotes instead.
 ${diffRule()}
 {"questions":[
 {"id":11,"type":"fill_blank","question":"","options":["①","②","③","④"],"answer":"①","explanation":""},
@@ -239,7 +239,7 @@ async function geminiReq(parts, modelIdx=0, retry=0){
     method:"POST",headers:{"Content-Type":"application/json"},
     body:JSON.stringify({
       contents:[{parts}],
-      generationConfig:{temperature:0.3,maxOutputTokens:8192}
+      generationConfig:{temperature:0.3,maxOutputTokens:8192,responseMimeType:"application/json"}
     })
   });
   const d=await r.json();
@@ -265,8 +265,21 @@ async function geminiReq(parts, modelIdx=0, retry=0){
   const raw=d.candidates?.[0]?.content?.parts?.[0]?.text||"";
   const clean=raw.replace(/```json|```/g,"").trim();
   const s=clean.indexOf("{"),e=clean.lastIndexOf("}");
-  if(s===-1||e===-1)throw new Error("JSON 파싱 실패");
-  return JSON.parse(clean.slice(s,e+1));
+  if(s===-1||e===-1){
+    if(retry<2){await new Promise(res=>setTimeout(res,1500));return geminiReq(parts,modelIdx,retry+1);}
+    throw new Error("AI 응답을 읽지 못했어요. 다시 시도해주세요.");
+  }
+  try{
+    return JSON.parse(clean.slice(s,e+1));
+  }catch(pe){
+    // 형식이 깨진 응답 → 같은 요청을 다시 시도 (최대 2회)
+    if(retry<2){
+      set({_retryMsg:"AI 응답을 다듬는 중... 다시 시도할게요 🔄"});
+      await new Promise(res=>setTimeout(res,1500));
+      return geminiReq(parts,modelIdx,retry+1);
+    }
+    throw new Error("AI가 문제를 만드는 중 형식 오류가 났어요. '퀴즈 시작하기'를 다시 눌러주세요. 🙏");
+  }
 }
 
 async function callGemini(){
