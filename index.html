@@ -4,7 +4,7 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
   <title>📚 책 읽기 퀴즈</title>
-  <!-- v1.1: 재도전/기록 채점 버그 수정 (extractNum 비교) -->
+  <!-- v1.2: 난이도 선택(쉬움/보통/어려움) 추가, v1.1: 재도전/기록 채점 버그 수정 -->
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700;900&display=swap" rel="stylesheet"/>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
@@ -21,11 +21,21 @@
 <body>
 <div id="app"></div>
 <script>
+// ── 난이도 설정 ──
+const DIFFS={
+  easy:{label:"🌱 쉬움",sec:30,rule:"DIFFICULTY: EASY. Use very simple, short sentences and common words. Ask about obvious main events and main characters. Make the 3 wrong options clearly different from the right answer. Vocabulary: only very common words."},
+  normal:{label:"🌿 보통",sec:15,rule:"DIFFICULTY: NORMAL. Standard 2nd-grade level questions about main events, characters, and feelings."},
+  hard:{label:"🔥 어려움",sec:10,rule:"DIFFICULTY: HARD. Ask about details, cause and effect, a character's feelings and reasons, and inference (why / what would happen). Make all options plausible and similar. Use more challenging vocabulary and avoid questions answerable from the title alone."}
+};
+function getDiff(){const d=localStorage.getItem("bq_diff");return DIFFS[d]?d:"normal";}
+function diffRule(){return DIFFS[getDiff()].rule;}
+
 // 1단계: OX5 + 내용이해5 = 10문제 (빠른 시작)
-const PROMPT1=`You are a reading quiz generator for 2nd graders.
+const PROMPT1=()=>`You are a reading quiz generator for 2nd graders.
 Step 1: Identify the book from the cover image.
 Step 2: Generate exactly 10 quiz questions using YOUR KNOWLEDGE of the story.
 Language rule: Korean book→Korean questions, English book→English questions.
+${diffRule()}
 Return JSON only, no markdown, no extra text.
 {"book_title":"","author":"","language":"ko","book_found":true,"reading_level":2.0,"questions":[
 {"id":1,"type":"ox","question":"","answer":true,"explanation":""},
@@ -44,6 +54,7 @@ Fill ALL 10 questions with real story content. book_found:false if unknown. read
 // 2단계: 빈칸5 + 단어10 = 15문제 (백그라운드)
 const PROMPT2=(title,lang)=>`Generate exactly 15 quiz questions about "${title}" for 2nd graders.
 Language: ${lang==="en"?"English":"Korean"}. Use real story content. JSON only, no extra text.
+${diffRule()}
 {"questions":[
 {"id":11,"type":"fill_blank","question":"","options":["①","②","③","④"],"answer":"①","explanation":""},
 {"id":12,"type":"fill_blank","question":"","options":["①","②","③","④"],"answer":"②","explanation":""},
@@ -264,14 +275,14 @@ async function callGemini(){
   try{
     // 1단계: OX5 + 내용이해5 = 10문제 (즉시 시작)
     const p1=await geminiReq([
-      {text:PROMPT1},
+      {text:PROMPT1()},
       {inline_data:{mime_type:"image/jpeg",data:st.imgData}},
       {text:"JSON만 반환해."}
     ]);
     if(!p1.book_found){set({phase:"upload",error:"책을 인식하지 못했어요. 표지가 잘 보이게 다시 찍어주세요! 📸"});return;}
     if(!p1.questions||p1.questions.length===0){set({phase:"upload",error:"문제 생성에 실패했어요. 다시 시도해주세요."});return;}
 
-    const bookInfo={title:p1.book_title,author:p1.author,lang:p1.language||"ko",level:p1.reading_level||null};
+    const bookInfo={title:p1.book_title,author:p1.author,lang:p1.language||"ko",level:p1.reading_level||null,diff:getDiff()};
     // 10문제로 바로 퀴즈 시작
     set({bookInfo,questions:p1.questions,idx:0,answers:{},firstAnswers:{},phase:"quiz",_loadingMore:true});
 
@@ -331,7 +342,7 @@ function goNext(){
 }
 
 /* ── 타이머 ── */
-const TIMER_SEC=15;
+let TIMER_SEC=DIFFS[getDiff()].sec;
 let _timerId=null;
 let _timerLeft=TIMER_SEC;
 
@@ -341,6 +352,7 @@ function clearTimer(){
 
 function startTimer(){
   clearTimer();
+  TIMER_SEC=DIFFS[getDiff()].sec;
   _timerLeft=TIMER_SEC;
   _timerId=setInterval(()=>{
     _timerLeft--;
@@ -670,6 +682,12 @@ function draw(){
             <input type="file" accept="image/*" id="gal"/>
           </label>
         </div>
+        <div style="margin-bottom:14px">
+          <p style="font-size:12px;color:#7B1FA2;font-weight:700;text-align:center;margin-bottom:6px">난이도 선택</p>
+          <div style="display:flex;gap:8px">
+            ${Object.entries(DIFFS).map(([k,d])=>`<button data-diff="${k}" style="flex:1;padding:10px 0;border-radius:12px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;border:2px solid #7B1FA2;background:${getDiff()===k?"#7B1FA2":"white"};color:${getDiff()===k?"white":"#7B1FA2"}">${d.label}<br><span style="font-size:10px;font-weight:600">${d.sec}초</span></button>`).join("")}
+          </div>
+        </div>
         ${imgPrev?`<button id="start" style="${btn("linear-gradient(135deg,#7B1FA2,#E91E63)","white","padding:16px 0;font-size:17px;font-weight:900;box-shadow:0 4px 16px rgba(123,31,162,.4)")}">🎯 퀴즈 시작하기!</button>`:""}
 
         <div style="margin-top:20px;border-top:1px solid #EEE;padding-top:16px">
@@ -683,6 +701,7 @@ function draw(){
         </div>
       </div>
     </div>`;
+    document.querySelectorAll("[data-diff]").forEach(b=>b.addEventListener("click",()=>{localStorage.setItem("bq_diff",b.dataset.diff);draw();}));
     document.getElementById("cam").addEventListener("change",e=>loadImg(e.target.files[0]));
     document.getElementById("gal").addEventListener("change",e=>loadImg(e.target.files[0]));
     document.getElementById("switchuser").addEventListener("click",()=>set({phase:"select",imgData:null,imgPrev:null}));
@@ -740,6 +759,7 @@ function draw(){
       </div>`;
     }
 
+    if(!_timerId&&!st.shown){TIMER_SEC=DIFFS[getDiff()].sec;_timerLeft=TIMER_SEC;}
     const initPct=(_timerLeft/TIMER_SEC)*100;
     const initCol=_timerLeft<=5?"#C62828":_timerLeft<=10?"#FF8F00":"#2E7D32";
 
