@@ -4,7 +4,7 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
   <title>📚 책 읽기 퀴즈</title>
-  <!-- v1.2: 난이도 선택(쉬움/보통/어려움) 추가, v1.1: 재도전/기록 채점 버그 수정 -->
+  <!-- v1.3: 어려움 난이도 강화, v1.2: 난이도 선택(쉬움/보통/어려움) 추가, v1.1: 재도전/기록 채점 버그 수정 -->
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700;900&display=swap" rel="stylesheet"/>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
@@ -25,7 +25,7 @@
 const DIFFS={
   easy:{label:"🌱 쉬움",sec:30,rule:"DIFFICULTY: EASY. Use very simple, short sentences and common words. Ask about obvious main events and main characters. Make the 3 wrong options clearly different from the right answer. Vocabulary: only very common words."},
   normal:{label:"🌿 보통",sec:15,rule:"DIFFICULTY: NORMAL. Standard 2nd-grade level questions about main events, characters, and feelings."},
-  hard:{label:"🔥 어려움",sec:10,rule:"DIFFICULTY: HARD. Ask about details, cause and effect, a character's feelings and reasons, and inference (why / what would happen). Make all options plausible and similar. Use more challenging vocabulary and avoid questions answerable from the title alone."}
+  hard:{label:"🔥 어려움",sec:10,rule:"DIFFICULTY: HARD (override the 2nd-grade level above: target 4th-5th grade reading comprehension). Do NOT ask about the title, cover, or the most obvious main event. Ask about specific details from the middle and end of the story, cause and effect (why did it happen), a character's hidden feelings or motives, comparing two characters or scenes, the lesson/theme, and inference (what will probably happen next and why). OX questions must be tricky: use statements that are almost true but change one detail. Every wrong option must be plausible, similar in length and wording to the right answer, and partly true in the story. Vary the position of the correct answer. Vocabulary: pick less common words (including idioms, Sino-Korean words or abstract words) and test meaning in context, with close-meaning distractors. Fill-in-the-blank: the blank must need understanding of the sentence's context, not just the first word."}
 };
 function getDiff(){const d=localStorage.getItem("bq_diff");return DIFFS[d]?d:"normal";}
 function diffRule(){return DIFFS[getDiff()].rule;}
